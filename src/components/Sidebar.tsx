@@ -221,15 +221,15 @@ export default function Sidebar({
   };
 
   return (
-    <div className="w-full h-[45dvh] md:h-[100dvh] md:w-[24rem] bg-white shrink-0 overflow-y-auto border-t md:border-t-0 md:border-r border-uoft-border flex flex-col font-sans relative z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] md:shadow-[0_8px_32px_rgba(30,55,101,0.18)]">
+    <div className="w-full h-[62dvh] md:h-[100dvh] md:w-[24rem] bg-white shrink-0 overflow-y-auto border-t md:border-t-0 md:border-r border-uoft-border flex flex-col font-sans relative z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] md:shadow-[0_8px_32px_rgba(30,55,101,0.18)]">
 
     {/* Dark UofT Blue header */}
     <div className="bg-uoft-blue relative overflow-hidden shrink-0">
       {/* Subtle teal gradient overlay for depth */}
       <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(135deg, rgba(0,120,148,0.25) 0%, transparent 60%)' }} />
-      <div className="relative z-10 px-5 pt-5 pb-4 md:px-6 md:pt-6 md:pb-5">
-        <h1 className="text-2xl md:text-[1.65rem] font-black text-white leading-tight tracking-tight">
-          Toronto<br />Neighbourhoods
+      <div className="relative z-10 px-4 pt-3 pb-2 md:px-6 md:pt-6 md:pb-5">
+        <h1 className="text-xl md:text-[1.65rem] font-black text-white leading-tight tracking-tight">
+          Toronto <span className="inline md:hidden">Neighbourhoods</span><span className="hidden md:inline"><br />Neighbourhoods</span>
         </h1>
       </div>
       {/* Teal gradient rule */}
@@ -446,7 +446,7 @@ export default function Sidebar({
     )}
 
     {/* Logo strip */}
-    <div className="bg-white border-t border-uoft-border px-4 py-3 flex items-center justify-between gap-2 shrink-0" style={{ minHeight: '56px' }}>
+    <div className="bg-white border-t border-uoft-border px-4 py-2 md:py-3 flex items-center justify-between gap-2 shrink-0">
       <div className="flex-1 flex items-center justify-center">
         <a href="https://utoronto.ca" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center w-full">
           <img src={logoUofT} alt="University of Toronto" style={{ maxHeight: '28px', width: 'auto', maxWidth: '100%' }} />
