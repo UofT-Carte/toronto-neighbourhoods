@@ -1,0 +1,60 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Required repository secrets:
+#   DEPLOY_HOST      — hostname/IP of the production VM
+#   DEPLOY_USER      — SSH username on the VM
+#   DEPLOY_SSH_KEY   — private SSH key for the VM
+# GITHUB_TOKEN is provided automatically by GitHub Actions.
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: uoft-carte/toronto-neighbourhoods
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd ~/carte
+            docker compose pull neighbourhoods
+            docker compose up -d neighbourhoods
+            docker image prune -f
+
+      - name: Health check
+        run: |
+          sleep 15
+          curl -fL --retry 5 --retry-delay 10 https://carte.utoronto.ca/neighbourhoods/
