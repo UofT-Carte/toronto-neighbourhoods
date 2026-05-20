@@ -521,8 +521,8 @@ export default function Sidebar({
           }
         >
           <div className="space-y-4 text-[15px] text-uoft-body leading-relaxed">
-            <p>Official city boundaries don't always match how we actually define our neighbourhoods. This community project aims to map Toronto's neighbourhoods based on how the people who live here define them.</p>
-            <p>Help us crowdsource a new map of the city by drawing where you think your neighbourhood begins and ends.</p>
+            <p>Official city boundaries don't always match how residents actually experience their neighbourhoods. This research project, led by Carte and the School of Cities at the University of Toronto, is building a new map of Toronto based on how the people who live here define it.</p>
+            <p>Help us by drawing where you think your neighbourhood begins and ends.</p>
             <div className="pt-2 border-t border-uoft-border text-sm">
               <p>A project by <a href="https://carte.utoronto.ca/" target="_blank" rel="noopener noreferrer" className="text-uoft-teal font-bold underline hover:text-uoft-blue">Carte</a>, UofT Engineering's applied AI hub, and the <a href="https://schoolofcities.utoronto.ca/" target="_blank" rel="noopener noreferrer" className="text-uoft-teal font-bold underline hover:text-uoft-blue">School of Cities</a>, a multidisciplinary hub for urban research, education, and engagement at the University of Toronto.</p>
             </div>
