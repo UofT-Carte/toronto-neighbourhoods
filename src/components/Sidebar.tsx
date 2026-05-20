@@ -221,10 +221,10 @@ export default function Sidebar({
   };
 
   return (
-    <div className={`w-full ${step === 2 && !isAppSubmitted ? 'h-[30dvh]' : 'h-[62dvh]'} md:h-[100dvh] md:w-[24rem] bg-white shrink-0 overflow-y-auto border-t md:border-t-0 md:border-r border-uoft-border flex flex-col font-sans relative z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] md:shadow-[0_8px_32px_rgba(30,55,101,0.18)]`}>
+    <div className={`w-full ${step === 2 && !isAppSubmitted ? 'h-[34dvh]' : 'h-[62dvh]'} md:h-[100dvh] md:w-[24rem] bg-white shrink-0 overflow-y-auto border-t md:border-t-0 md:border-r border-uoft-border flex flex-col font-sans relative z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] md:shadow-[0_8px_32px_rgba(30,55,101,0.18)]`}>
 
     {/* Dark UofT Blue header */}
-    <div className="bg-uoft-blue relative overflow-hidden shrink-0">
+    <div className={`bg-uoft-blue relative overflow-hidden shrink-0 ${step === 2 && !isAppSubmitted ? 'hidden md:block' : ''}`}>
       {/* Subtle teal gradient overlay for depth */}
       <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(135deg, rgba(0,120,148,0.25) 0%, transparent 60%)' }} />
       <div className="relative z-10 px-4 pt-3 pb-2 md:px-6 md:pt-6 md:pb-5">
@@ -446,7 +446,7 @@ export default function Sidebar({
     )}
 
     {/* Logo strip */}
-    <div className="bg-white border-t border-uoft-border px-4 py-2 md:py-3 flex items-center justify-between gap-2 shrink-0">
+    <div className={`bg-white border-t border-uoft-border px-4 py-2 md:py-3 flex items-center justify-between gap-2 shrink-0 ${step === 2 && !isAppSubmitted ? 'hidden md:flex' : ''}`}>
       <div className="flex-1 flex items-center justify-center">
         <a href="https://utoronto.ca" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center w-full">
           <img src={logoUofT} alt="University of Toronto" style={{ maxHeight: '28px', width: 'auto', maxWidth: '100%' }} />
