@@ -105,8 +105,8 @@ export default function Sidebar({
     if (canNativeShare) {
       try {
         await navigator.share({
-          title: 'Draw Your Toronto Neighbourhood',
-          text: 'Help map Toronto by drawing your neighbourhood boundary',
+          title: 'Map Your Toronto Neighbourhood',
+          text: 'Help map Toronto by tracing your neighbourhood boundary',
           url,
         });
       } catch {
@@ -240,7 +240,7 @@ export default function Sidebar({
     <div className="flex bg-uoft-tint-bg border-b border-uoft-border shrink-0">
       {([
         { n: 1, label: 'Name' },
-        { n: 2, label: 'Draw' },
+        { n: 2, label: 'Map' },
         { n: 3, label: 'Submit' },
       ] as const).map(({ n, label }) => {
         const isDone   = step > n || isAppSubmitted;
@@ -315,7 +315,7 @@ export default function Sidebar({
             <div className="bg-uoft-tint-step border-b border-uoft-border px-5 py-3 flex items-center gap-3 border-l-4 border-l-uoft-sky">
               <div className="w-5 h-5 bg-uoft-teal rounded-full flex items-center justify-center text-white text-[10px] font-black shrink-0">✓</div>
               <div className="flex-1 min-w-0">
-                <div className="text-[11px] font-bold text-uoft-teal">Step 2 · Boundary drawn</div>
+                <div className="text-[11px] font-bold text-uoft-teal">Step 2 · Boundary mapped</div>
                 <div className="text-xs text-uoft-muted">{polygonPoints.length} points</div>
               </div>
               <button
@@ -494,7 +494,7 @@ export default function Sidebar({
             <p>When you submit your map, we store the following data in our database securely:</p>
             <ul className="list-disc pl-5 space-y-2">
               <li><strong className="text-uoft-blue">Your neighbourhood's name</strong> (including alternate names you might suggest).</li>
-              <li><strong className="text-uoft-blue">The centre of your drawn boundary</strong> (a single latitude/longitude coordinate calculated from the shape you drew).</li>
+              <li><strong className="text-uoft-blue">The centre of your mapped boundary</strong> (a single latitude/longitude coordinate calculated from the shape you drew).</li>
               <li><strong className="text-uoft-blue">The boundary polygon</strong> (the shape of the neighbourhood you drew).</li>
               <li><strong className="text-uoft-blue">Optional feedback</strong> on how the neighbourhood is changing.</li>
               <li><strong className="text-uoft-blue">A timestamp</strong> of when the submission was made.</li>
@@ -509,7 +509,7 @@ export default function Sidebar({
 
       {isWelcomeModalOpen && (
         <Modal
-          title="Draw Your Toronto Neighbourhood"
+          title="Map Your Toronto Neighbourhood"
           onClose={handleCloseWelcomeModal}
           footer={
             <button
@@ -522,7 +522,7 @@ export default function Sidebar({
         >
           <div className="space-y-4 text-[15px] text-uoft-body leading-relaxed">
             <p>Official city boundaries don't always match how residents actually experience their neighbourhoods. This research project, led by Carte and the School of Cities at the University of Toronto, is building a new map of Toronto based on how the people who live here define it.</p>
-            <p>Help us by drawing where you think your neighbourhood begins and ends.</p>
+            <p>Help us by mapping where you think your neighbourhood begins and ends.</p>
             <div className="pt-2 border-t border-uoft-border text-sm">
               <p>A project by <a href="https://carte.utoronto.ca/" target="_blank" rel="noopener noreferrer" className="text-uoft-teal font-bold underline hover:text-uoft-blue">Carte</a>, UofT Engineering's applied AI hub, and the <a href="https://schoolofcities.utoronto.ca/" target="_blank" rel="noopener noreferrer" className="text-uoft-teal font-bold underline hover:text-uoft-blue">School of Cities</a>, a multidisciplinary hub for urban research, education, and engagement at the University of Toronto.</p>
             </div>

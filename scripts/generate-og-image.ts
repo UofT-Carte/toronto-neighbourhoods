@@ -16,7 +16,7 @@ const navyBarSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" hei
     font-size="44"
     font-weight="bold"
     fill="white"
-  >Draw Your Toronto Neighbourhood</text>
+  >Map Your Toronto Neighbourhood</text>
   <text
     x="40" y="115"
     font-family="Arial, sans-serif"
