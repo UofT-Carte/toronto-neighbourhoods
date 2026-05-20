@@ -221,7 +221,7 @@ export default function Sidebar({
   };
 
   return (
-    <div className="w-full h-[62dvh] md:h-[100dvh] md:w-[24rem] bg-white shrink-0 overflow-y-auto border-t md:border-t-0 md:border-r border-uoft-border flex flex-col font-sans relative z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] md:shadow-[0_8px_32px_rgba(30,55,101,0.18)]">
+    <div className={`w-full ${step === 2 && !isAppSubmitted ? 'h-[30dvh]' : 'h-[62dvh]'} md:h-[100dvh] md:w-[24rem] bg-white shrink-0 overflow-y-auto border-t md:border-t-0 md:border-r border-uoft-border flex flex-col font-sans relative z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] md:shadow-[0_8px_32px_rgba(30,55,101,0.18)]`}>
 
     {/* Dark UofT Blue header */}
     <div className="bg-uoft-blue relative overflow-hidden shrink-0">
