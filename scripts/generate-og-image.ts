@@ -29,6 +29,9 @@ async function main() {
   const page = await browser.newPage();
 
   await page.setViewportSize({ width: WIDTH, height: HEIGHT });
+  await page.addInitScript(() => {
+    localStorage.setItem('hasSeenWelcomeModal', 'true');
+  });
   await page.goto('http://localhost:3000/neighbourhoods/');
 
   // Wait for the map canvas to appear (MapLibre initialises async)
