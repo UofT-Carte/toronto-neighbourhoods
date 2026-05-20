@@ -316,7 +316,7 @@ export default function Sidebar({
               <div className="w-5 h-5 bg-uoft-teal rounded-full flex items-center justify-center text-white text-[10px] font-black shrink-0">✓</div>
               <div className="flex-1 min-w-0">
                 <div className="text-[11px] font-bold text-uoft-teal">Step 2 · Boundary drawn</div>
-                <div className="text-sm font-bold text-uoft-blue">{polygonPoints.length} points</div>
+                <div className="text-xs text-uoft-muted">{polygonPoints.length} points</div>
               </div>
               <button
                 onClick={() => { setStep(2); setPolygonPoints([]); setIsFinished(false); setHomeLocation(null); }}
