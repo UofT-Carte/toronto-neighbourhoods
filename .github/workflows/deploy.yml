@@ -5,6 +5,12 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Required repository secrets:
+#   DEPLOY_HOST      — hostname/IP of the production VM
+#   DEPLOY_USER      — SSH username on the VM
+#   DEPLOY_SSH_KEY   — private SSH key for the VM
+# GITHUB_TOKEN is provided automatically by GitHub Actions.
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: carte-toronto/toronto-neighbourhoods
