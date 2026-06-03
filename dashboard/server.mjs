@@ -15,17 +15,17 @@ const firebaseConfig = JSON.parse(
   readFileSync(join(ROOT, 'firebase-applet-config.json'), 'utf8'),
 );
 
-let dbPromise = null;
+let _db = null;
 function getDb() {
-  if (!dbPromise) {
+  if (!_db) {
     const adminApp = initializeApp({
       credential: applicationDefault(),
       projectId: firebaseConfig.projectId,
     });
     // Non-default database id — must be passed explicitly (matches src/firebase.ts).
-    dbPromise = getFirestore(adminApp, firebaseConfig.firestoreDatabaseId);
+    _db = getFirestore(adminApp, firebaseConfig.firestoreDatabaseId);
   }
-  return dbPromise;
+  return _db;
 }
 
 app.get('/api/submissions', async (_req, res) => {
@@ -54,7 +54,7 @@ app.get('/api/submissions', async (_req, res) => {
   } catch (err) {
     console.error('Failed to read submissions:', err);
     res.status(500).json({
-      error: String(err && err.message ? err.message : err),
+      error: String(err?.message ?? err),
       hint: 'Ensure you are authenticated: run `gcloud auth application-default login` with access to the Firebase project.',
     });
   }
