@@ -11,11 +11,17 @@ const app = express();
 
 // Serve the app's map style so the dashboard map matches the site.
 app.get('/map-style.json', (_req, res) => {
-  res.sendFile(join(ROOT, 'src', 'assets', 'map-style.json'));
+  res.sendFile(join(ROOT, 'src', 'assets', 'map-style.json'), (err) => {
+    if (err) res.status(500).send(String(err.message ?? err));
+  });
 });
 
-// Static dashboard assets (index.html, etc.)
-app.use(express.static(__dirname));
+// Serve the dashboard page.
+app.get('/', (_req, res) => {
+  res.sendFile(join(__dirname, 'index.html'), (err) => {
+    if (err) res.status(500).send(String(err.message ?? err));
+  });
+});
 
 app.listen(PORT, () => {
   console.log(`\n  Submissions dashboard running at http://localhost:${PORT}\n`);
