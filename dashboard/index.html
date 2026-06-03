@@ -16,7 +16,6 @@
     header button { margin-left: auto; padding: 6px 14px; border: 1px solid #1E3765; background: #1E3765; color: #fff; border-radius: 6px; cursor: pointer; font-size: 14px; }
     header button:hover { background: #2a4a85; }
     #error { display: none; background: #fdecea; color: #7a271a; border: 1px solid #f3c0bb; padding: 12px 16px; margin: 0; font-size: 14px; }
-    #error code { background: #fff; padding: 1px 5px; border-radius: 4px; }
     #main { flex: 1; display: flex; min-height: 0; }
     #map { flex: 1; min-width: 0; }
     #panel { width: 420px; border-left: 1px solid #d8dde6; overflow-y: auto; }
@@ -215,7 +214,7 @@
         const badge = (v) => '<span class="badge ' + (v ? 'yes">✓' : 'no">·') + '</span>';
         tr.innerHTML =
           '<td>' + escapeHtml(s.neighborhoodName) + '</td>' +
-          '<td title="' + absDate(s.createdAt) + '">' + relativeTime(s.createdAt) + '</td>' +
+          '<td title="' + escapeHtml(absDate(s.createdAt)) + '">' + relativeTime(s.createdAt) + '</td>' +
           '<td>' + (s.polygonPoints ? s.polygonPoints.length : 0) + '</td>' +
           '<td>' + badge(!!s.changesText) + '</td>' +
           '<td>' + badge(!!s.otherNamesText) + '</td>';
