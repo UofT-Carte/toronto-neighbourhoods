@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Submissions Dashboard</title>
+  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; color: #1E3765; }
+    #app { display: flex; flex-direction: column; height: 100vh; }
+    header { display: flex; align-items: center; gap: 16px; padding: 10px 16px; border-bottom: 1px solid #d8dde6; }
+    header h1 { font-size: 16px; margin: 0; }
+    header .count { color: #5b6678; font-size: 14px; }
+    header button { margin-left: auto; padding: 6px 14px; border: 1px solid #1E3765; background: #1E3765; color: #fff; border-radius: 6px; cursor: pointer; font-size: 14px; }
+    header button:hover { background: #2a4a85; }
+    #error { display: none; background: #fdecea; color: #7a271a; border: 1px solid #f3c0bb; padding: 12px 16px; margin: 0; font-size: 14px; }
+    #main { flex: 1; display: flex; min-height: 0; }
+    #map { flex: 1; min-width: 0; }
+    #panel { width: 420px; border-left: 1px solid #d8dde6; overflow-y: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #eef0f4; vertical-align: top; }
+    th { position: sticky; top: 0; background: #f6f8fb; cursor: pointer; user-select: none; }
+    th .arrow { color: #9aa4b5; font-size: 11px; }
+    tr.row { cursor: pointer; }
+    tr.row:hover { background: #f0f6ff; }
+    tr.row.selected { background: #e0edff; }
+    .badge { display: inline-block; width: 16px; text-align: center; }
+    .badge.yes { color: #1a7f37; }
+    .badge.no { color: #c9ced8; }
+    .detail td { background: #fafbfd; font-size: 12px; color: #3a4866; }
+    .detail .label { font-weight: 600; color: #1E3765; }
+    .empty { padding: 24px; color: #5b6678; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>Submissions Dashboard</h1>
+      <span class="count" id="count">Loading…</span>
+      <button id="refresh">Refresh</button>
+    </header>
+    <pre id="error"></pre>
+    <div id="main">
+      <div id="map"></div>
+      <div id="panel"><table id="table"><thead></thead><tbody></tbody></table></div>
+    </div>
+  </div>
+
+  <script>
+    const PALETTE = ['#1E3765', '#6FC7EA', '#E2A03F', '#C0504D', '#4F9D69', '#8E5CA8', '#D9772B', '#3A8DBE'];
+    const colorFor = (i) => PALETTE[i % PALETTE.length];
+
+    // Stored data is Leaflet [lat,lng] / {lat,lng}; GeoJSON/MapLibre need [lng,lat].
+    const homeToLngLat = (h) => (Array.isArray(h) && h.length === 2 ? [h[1], h[0]] : null);
+    const ringToLngLat = (pts) => (pts || []).map((p) => [p.lng, p.lat]);
+
+    function relativeTime(iso) {
+      if (!iso) return 'unknown';
+      const then = new Date(iso).getTime();
+      const days = Math.floor((Date.now() - then) / 86400000);
+      if (days <= 0) return 'today';
+      if (days === 1) return '1d ago';
+      if (days < 30) return days + 'd ago';
+      const months = Math.floor(days / 30);
+      return months + 'mo ago';
+    }
+    function absDate(iso) {
+      if (!iso) return '—';
+      return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+
+    let map;
+    let submissions = [];
+    let markers = [];
+    let selectedId = null;
+    let sortKey = 'createdAt';
+    let sortDir = 'desc'; // 'asc' | 'desc'
+
+    function initMap() {
+      map = new maplibregl.Map({
+        container: 'map',
+        style: '/map-style.json',
+        center: [-79.38, 43.72],
+        zoom: 10.5,
+      });
+      map.addControl(new maplibregl.NavigationControl(), 'top-left');
+      map.on('load', () => {
+        map.addSource('subs', {
+          type: 'geojson',
+          data: { type: 'FeatureCollection', features: [] },
+          promoteId: 'id',
+        });
+        map.addLayer({
+          id: 'subs-fill', type: 'fill', source: 'subs',
+          paint: {
+            'fill-color': ['get', 'color'],
+            'fill-opacity': ['case', ['boolean', ['feature-state', 'selected'], false], 0.55, 0.18],
+          },
+        });
+        map.addLayer({
+          id: 'subs-outline', type: 'line', source: 'subs',
+          paint: {
+            'line-color': ['get', 'color'],
+            'line-width': ['case', ['boolean', ['feature-state', 'selected'], false], 3, 1.5],
+          },
+        });
+        load();
+      });
+    }
+
+    function toFeatureCollection() {
+      return {
+        type: 'FeatureCollection',
+        features: submissions
+          .map((s, i) => {
+            const ring = ringToLngLat(s.polygonPoints);
+            if (ring.length < 3) return null;
+            const closed = ring.concat([ring[0]]);
+            return {
+              type: 'Feature',
+              id: s.id,
+              properties: { id: s.id, color: colorFor(i), name: s.neighborhoodName },
+              geometry: { type: 'Polygon', coordinates: [closed] },
+            };
+          })
+          .filter(Boolean),
+      };
+    }
+
+    function allCoords() {
+      const coords = [];
+      submissions.forEach((s) => {
+        ringToLngLat(s.polygonPoints).forEach((c) => coords.push(c));
+        const h = homeToLngLat(s.homeLocation);
+        if (h) coords.push(h);
+      });
+      return coords;
+    }
+
+    function fitTo(coords) {
+      if (!coords.length) return;
+      const b = coords.reduce((acc, c) => acc.extend(c), new maplibregl.LngLatBounds(coords[0], coords[0]));
+      map.fitBounds(b, { padding: 40, maxZoom: 15, duration: 600 });
+    }
+
+    function renderMap() {
+      if (!map || !map.getSource('subs')) return;
+      map.getSource('subs').setData(toFeatureCollection());
+      markers.forEach((m) => m.remove());
+      markers = submissions
+        .map((s, i) => {
+          const h = homeToLngLat(s.homeLocation);
+          if (!h) return null;
+          const el = document.createElement('div');
+          el.style.cssText =
+            'width:12px;height:12px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.3);background:' +
+            colorFor(i);
+          return new maplibregl.Marker({ element: el }).setLngLat(h).addTo(map);
+        })
+        .filter(Boolean);
+      fitTo(allCoords());
+    }
+
+    function setSelected(id) {
+      if (selectedId) map.setFeatureState({ source: 'subs', id: selectedId }, { selected: false });
+      selectedId = id;
+      if (id) {
+        map.setFeatureState({ source: 'subs', id }, { selected: true });
+        const s = submissions.find((x) => x.id === id);
+        if (s) fitTo(ringToLngLat(s.polygonPoints));
+      }
+      renderTable();
+    }
+
+    function sortedSubmissions() {
+      const dir = sortDir === 'asc' ? 1 : -1;
+      return [...submissions].sort((a, b) => {
+        if (sortKey === 'neighborhoodName') return dir * a.neighborhoodName.localeCompare(b.neighborhoodName);
+        return dir * (a.createdAt ?? '').localeCompare(b.createdAt ?? '');
+      });
+    }
+
+    function arrow(key) {
+      if (sortKey !== key) return '<span class="arrow">↕</span>';
+      return '<span class="arrow">' + (sortDir === 'asc' ? '▲' : '▼') + '</span>';
+    }
+
+    function renderTable() {
+      const thead = document.querySelector('#table thead');
+      const tbody = document.querySelector('#table tbody');
+      thead.innerHTML =
+        '<tr>' +
+        '<th data-sort="neighborhoodName">Name ' + arrow('neighborhoodName') + '</th>' +
+        '<th data-sort="createdAt">Submitted ' + arrow('createdAt') + '</th>' +
+        '<th>Pts</th><th>Chg</th><th>Alt</th></tr>';
+      thead.querySelectorAll('th[data-sort]').forEach((th) => {
+        th.onclick = () => {
+          const key = th.dataset.sort;
+          if (sortKey === key) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+          else { sortKey = key; sortDir = key === 'neighborhoodName' ? 'asc' : 'desc'; }
+          renderTable();
+        };
+      });
+
+      tbody.innerHTML = '';
+      if (!submissions.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty">No submissions yet.</td></tr>';
+        return;
+      }
+      sortedSubmissions().forEach((s) => {
+        const tr = document.createElement('tr');
+        tr.className = 'row' + (s.id === selectedId ? ' selected' : '');
+        const badge = (v) => '<span class="badge ' + (v ? 'yes">✓' : 'no">·') + '</span>';
+        tr.innerHTML =
+          '<td>' + escapeHtml(s.neighborhoodName) + '</td>' +
+          '<td title="' + escapeHtml(absDate(s.createdAt)) + '">' + relativeTime(s.createdAt) + '</td>' +
+          '<td>' + (s.polygonPoints ? s.polygonPoints.length : 0) + '</td>' +
+          '<td>' + badge(!!s.changesText) + '</td>' +
+          '<td>' + badge(!!s.otherNamesText) + '</td>';
+        tr.onclick = () => setSelected(s.id === selectedId ? null : s.id);
+        tbody.appendChild(tr);
+
+        if (s.id === selectedId && (s.changesText || s.otherNamesText)) {
+          const dr = document.createElement('tr');
+          dr.className = 'detail';
+          dr.innerHTML =
+            '<td colspan="5">' +
+            (s.changesText ? '<div><span class="label">Changes:</span> ' + escapeHtml(s.changesText) + '</div>' : '') +
+            (s.otherNamesText ? '<div><span class="label">Other names:</span> ' + escapeHtml(s.otherNamesText) + '</div>' : '') +
+            '</td>';
+          tbody.appendChild(dr);
+        }
+      });
+    }
+
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, (c) =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]),
+      );
+    }
+
+    function showError(msg) {
+      const el = document.getElementById('error');
+      el.style.display = 'block';
+      el.textContent = msg;
+    }
+    function clearError() {
+      document.getElementById('error').style.display = 'none';
+    }
+
+    async function load() {
+      clearError();
+      document.getElementById('count').textContent = 'Loading…';
+      try {
+        const res = await fetch('/api/submissions');
+        const body = await res.json();
+        if (!res.ok) {
+          showError((body.error || 'Request failed') + '\n\n' + (body.hint || ''));
+          document.getElementById('count').textContent = 'Error';
+          return;
+        }
+        submissions = body;
+        document.getElementById('count').textContent =
+          submissions.length + ' submission' + (submissions.length === 1 ? '' : 's');
+        selectedId = null;
+        renderMap();
+        renderTable();
+      } catch (e) {
+        showError('Could not reach the dashboard server.\n' + e);
+        document.getElementById('count').textContent = 'Error';
+      }
+    }
+
+    document.getElementById('refresh').onclick = load;
+    initMap();
+  </script>
+</body>
+</html>
