@@ -146,7 +146,7 @@
     }
 
     function renderMap() {
-      if (!map || !map.loaded() || !map.getSource('subs')) return;
+      if (!map || !map.getSource('subs')) return;
       map.getSource('subs').setData(toFeatureCollection());
       markers.forEach((m) => m.remove());
       markers = submissions
