@@ -4,7 +4,7 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import pointInPolygon from "point-in-polygon";
 
-import torontoGeoJson from "../toronto.json";
+import torontoGeoJson from "../assets/toronto-data/toronto.json";
 import mapStyle from "../assets/map-style.json";
 import transitLines from "../assets/toronto-data/current-lines.geo.json";
 import transitStations from "../assets/toronto-data/current-stations.geo.json";
