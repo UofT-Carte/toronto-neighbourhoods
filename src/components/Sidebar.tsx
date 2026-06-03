@@ -10,6 +10,7 @@ import { db, handleFirestoreError, OperationType } from "../firebase";
 import logoUofT          from '../assets/logos/logo-uoft.svg?url';
 import logoSchoolCities  from '../assets/logos/logo-school-of-cities.svg?url';
 import logoCarte         from '../assets/logos/logo-carte.svg?url';
+import exampleNeighbourhoodSketch from '../assets/toronto-data/example-neighbourhood-sketch.svg?url';
 
 interface NeighborhoodDoc {
   neighborhoodName: string;
@@ -333,6 +334,7 @@ export default function Sidebar({
               <div className="text-[12px] font-bold text-uoft-teal mb-1.5">Step 2 of 3</div>
               <h2 className="text-[17px] font-black text-uoft-blue leading-snug mb-2">Trace your neighbourhood</h2>
               <p className="text-[14px] text-uoft-body leading-relaxed">Click to place points around the boundary. Connect back to the start to close the shape.</p>
+              <img src={exampleNeighbourhoodSketch} alt="Example neighbourhood sketch" className="mt-3" style={{ width: '360px', maxWidth: '100%' }} />
               {polygonPoints.length > 0 && (
                 <button
                   onClick={handleUndo}
@@ -448,19 +450,19 @@ export default function Sidebar({
     {/* Logo strip */}
     <div className={`bg-white border-t border-uoft-border px-4 py-2 md:py-3 flex items-center justify-between gap-2 shrink-0 ${step === 2 && !isAppSubmitted ? 'hidden md:flex' : ''}`}>
       <div className="flex-1 flex items-center justify-center">
-        <a href="https://utoronto.ca" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center w-full">
+        <a href="https://utoronto.ca" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center w-full hover:opacity-75 transition-opacity">
           <img src={logoUofT} alt="University of Toronto" style={{ maxHeight: '28px', width: 'auto', maxWidth: '100%' }} />
         </a>
       </div>
       <div className="w-px h-8 bg-uoft-border shrink-0" />
       <div className="flex-1 flex items-center justify-center">
-        <a href="https://schoolofcities.utoronto.ca" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center w-full">
+        <a href="https://schoolofcities.utoronto.ca" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center w-full hover:opacity-75 transition-opacity">
           <img src={logoSchoolCities} alt="School of Cities" style={{ maxHeight: '28px', width: 'auto', maxWidth: '100%' }} />
         </a>
       </div>
       <div className="w-px h-8 bg-uoft-border shrink-0" />
       <div className="flex-1 flex items-center justify-center">
-        <a href="https://carte.utoronto.ca" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center w-full">
+        <a href="https://carte.utoronto.ca" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center w-full hover:opacity-75 transition-opacity">
           <img src={logoCarte} alt="Carte" style={{ maxHeight: '44px', width: 'auto', maxWidth: '100%' }} />
         </a>
       </div>
