@@ -3,6 +3,7 @@ import math
 from shapely.geometry import Polygon
 
 from geometry import parse_polygon, iou
+from geometry import agreement_surface, mean_pairwise_iou
 from tests.fixtures import unit_square
 
 
@@ -52,3 +53,29 @@ def test_iou_half_overlap():
     a = unit_square(0, 0, 100)
     b = unit_square(50, 0, 100)
     assert math.isclose(iou(a, b), 1.0 / 3.0, rel_tol=1e-9)
+
+
+def test_agreement_surface_identical_polys_full_consensus():
+    squares = [unit_square(0, 0, 1000) for _ in range(4)]
+    s = agreement_surface(squares, grid_res=50.0)
+    assert s["member_count"] == 4
+    # every cell covered by all 4 -> core ~= union
+    assert math.isclose(s["core_union_ratio"], 1.0, rel_tol=0.05)
+    assert s["edge_core_ratio"] < 0.05
+
+
+def test_agreement_surface_offset_polys_have_fuzzy_edges():
+    # 4 squares each shifted -> a shared core with fuzzy margins
+    squares = [unit_square(i * 100, 0, 1000) for i in range(4)]
+    s = agreement_surface(squares, grid_res=50.0)
+    assert 0.0 < s["core_union_ratio"] < 1.0
+    assert s["edge_area"] > 0.0
+
+
+def test_mean_pairwise_iou_single_is_one():
+    assert mean_pairwise_iou([unit_square(0, 0, 100)]) == 1.0
+
+
+def test_mean_pairwise_iou_identical_pair_is_one():
+    a = unit_square(0, 0, 100)
+    assert math.isclose(mean_pairwise_iou([a, a]), 1.0, rel_tol=1e-9)
