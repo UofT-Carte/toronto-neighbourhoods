@@ -22,21 +22,30 @@ def normalize_name(raw: str) -> str:
 
 
 def _cluster_distinct(distinct, threshold):
-    """Return {normalized_name: cluster_key} for the distinct normalized names."""
+    """Return {normalized_name: cluster_key} for the distinct normalized names.
+
+    Uses fuzz.ratio (whole-string similarity) with complete linkage instead of
+    token_set_ratio + single linkage. token_set_ratio rewards names that merely
+    share filler tokens (e.g. "Village", "Park"), and single linkage will chain
+    those partial matches transitively into one giant cluster. fuzz.ratio only
+    scores direct character-level similarity, and complete linkage requires
+    every pair within a cluster to be similar, which avoids that chaining
+    failure mode.
+    """
     if len(distinct) == 1:
         return {distinct[0]: 0}
     # Similarity matrix (0-100) via rapidfuzz, then distance = 100 - sim.
-    sim = process.cdist(distinct, distinct, scorer=fuzz.token_set_ratio)
+    sim = process.cdist(distinct, distinct, scorer=fuzz.ratio)
     dist = 100.0 - np.asarray(sim, dtype=float)
     np.fill_diagonal(dist, 0.0)
     dist = (dist + dist.T) / 2.0  # enforce symmetry for squareform
     condensed = squareform(dist, checks=False)
-    z = linkage(condensed, method="single")
+    z = linkage(condensed, method="complete")
     labels = fcluster(z, t=100 - threshold, criterion="distance")
     return {name: int(lbl) for name, lbl in zip(distinct, labels)}
 
 
-def assign_clusters(raw_names, threshold: int = 88):
+def assign_clusters(raw_names, threshold: int = 90):
     normalized = [normalize_name(r) for r in raw_names]
     distinct = sorted({n for n in normalized if n})
     key_to_id: dict = {}

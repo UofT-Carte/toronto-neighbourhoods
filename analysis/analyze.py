@@ -10,7 +10,7 @@ from geometry import parse_polygon, to_utm, mean_pairwise_iou, agreement_surface
 from contested import contested_pairs
 
 # ---- Config (tune here) ----------------------------------------------------
-NAME_SIM_THRESHOLD = 88
+NAME_SIM_THRESHOLD = 90
 GRID_RES = 50.0            # metres
 MIN_MEMBERS = 5
 IOU_THRESHOLD = 0.5

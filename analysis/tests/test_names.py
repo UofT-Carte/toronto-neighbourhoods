@@ -41,3 +41,17 @@ def test_assign_clusters_distinct_places_separate():
     raw = ["Leslieville", "Liberty Village"]
     ids, labels = assign_clusters(raw, threshold=88)
     assert ids[0] != ids[1]
+
+
+def test_assign_clusters_does_not_overmerge_shared_tokens():
+    # Names sharing a filler token ("Village") must NOT collapse together.
+    raw = ["Bloor West Village", "Seaton Village", "Liberty Village"]
+    ids, _ = assign_clusters(raw, threshold=90)
+    assert len(set(ids)) == 3
+
+
+def test_assign_clusters_keeps_distinct_neighbourhoods_apart():
+    raw = ["Leslieville", "Riverdale", "Parkdale", "Roncesvalles",
+           "Little Portugal", "Little Italy", "Queen West", "King West"]
+    ids, _ = assign_clusters(raw, threshold=90)
+    assert len(set(ids)) == 8
