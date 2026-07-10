@@ -1,0 +1,49 @@
+from collections import defaultdict
+
+from rapidfuzz import fuzz
+from shapely import STRtree
+
+from geometry import iou
+
+
+def contested_pairs(records, iou_threshold: float):
+    polys = [r["poly"] for r in records]
+    if len(polys) < 2:
+        return []
+    tree = STRtree(polys)
+
+    agg = defaultdict(lambda: {"count": 0, "iou_sum": 0.0})
+    for i, r in enumerate(records):
+        for j in tree.query(polys[i]):
+            if j <= i:
+                continue
+            other = records[j]
+            if other["cluster_id"] == r["cluster_id"]:
+                continue
+            score = iou(polys[i], polys[j])
+            if score < iou_threshold:
+                continue
+            key = tuple(sorted((r["label"], other["label"])))
+            agg[key]["count"] += 1
+            agg[key]["iou_sum"] += score
+
+    rows = [
+        {
+            "label_a": k[0],
+            "label_b": k[1],
+            "overlap_count": v["count"],
+            "mean_iou": round(v["iou_sum"] / v["count"], 4),
+        }
+        for k, v in agg.items()
+    ]
+    rows.sort(key=lambda x: (x["overlap_count"], x["mean_iou"]), reverse=True)
+    return rows
+
+
+def looks_like_same_name(a: str, b: str, threshold: int = 90) -> bool:
+    """True when two cluster labels are likely the SAME place under a variant/
+    sub-name (e.g. 'Parkdale'/'South Parkdale', 'Riverdale'/'North Riverdale').
+    token_set_ratio returns ~100 when one label's tokens are a subset of the
+    other's. (Used only for pairwise label comparison here, not for clustering.)
+    Cannot catch pure nicknames like 'Roncy' for Roncesvalles."""
+    return fuzz.token_set_ratio(a.lower(), b.lower()) >= threshold
