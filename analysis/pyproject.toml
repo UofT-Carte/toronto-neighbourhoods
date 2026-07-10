@@ -1,7 +1,7 @@
 [project]
 name = "neighbourhood-analysis"
 version = "0.1.0"
-description = "Add your description here"
+description = "Toronto neighbourhoods name/shape agreement analysis"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

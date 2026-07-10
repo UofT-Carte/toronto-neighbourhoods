@@ -56,6 +56,10 @@ def agreement_surface(polys, grid_res: float) -> dict:
     # coverage per cell with vectorized shapely point-in-polygon tests.
     xs = np.arange(minx + grid_res / 2, maxx, grid_res)
     ys = np.arange(miny + grid_res / 2, maxy, grid_res)
+    if xs.size == 0:  # bbox thinner than one cell on this axis
+        xs = np.array([(minx + maxx) / 2])
+    if ys.size == 0:
+        ys = np.array([(miny + maxy) / 2])
     gx, gy = np.meshgrid(xs, ys)
     gx, gy = gx.ravel(), gy.ravel()
 

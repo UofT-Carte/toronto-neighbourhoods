@@ -33,3 +33,17 @@ def test_contested_pairs_ignores_low_overlap():
         _rec(1, "B", unit_square(90, 0, 100)),  # small overlap, iou < 0.5
     ]
     assert contested_pairs(recs, iou_threshold=0.5) == []
+
+
+from contested import looks_like_same_name
+
+
+def test_looks_like_same_name_flags_subname():
+    assert looks_like_same_name("Parkdale", "South Parkdale")
+    assert looks_like_same_name("Riverdale", "North Riverdale")
+    assert looks_like_same_name("St Lawrence", "St Lawrence Market")
+
+
+def test_looks_like_same_name_rejects_distinct():
+    assert not looks_like_same_name("Church-Wellesley", "The Village")
+    assert not looks_like_same_name("Parkdale", "Roncesvalles")

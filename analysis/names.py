@@ -6,7 +6,7 @@ from rapidfuzz import fuzz, process
 from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.spatial.distance import squareform
 
-_POSSESSIVE = re.compile(r"'s\b|'s\b|s'\b")
+_POSSESSIVE = re.compile(r"['’]s\b|s['’]\b")
 _NON_ALNUM = re.compile(r"[^a-z0-9]+")
 _LEADING_THE = re.compile(r"^the\s+")
 

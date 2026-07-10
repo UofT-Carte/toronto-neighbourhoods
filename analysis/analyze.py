@@ -6,7 +6,7 @@ import pandas as pd
 
 from names import assign_clusters
 from geometry import parse_polygon, to_utm, mean_pairwise_iou, agreement_surface
-from contested import contested_pairs
+from contested import contested_pairs, looks_like_same_name
 
 # ---- Config (tune here) ----------------------------------------------------
 NAME_SIM_THRESHOLD = 90
@@ -118,8 +118,8 @@ def render_report(stats, cluster_df, contested_df, snapshot_date):
     q2 = cluster_df.sort_values("core_union_ratio", ascending=True) if not cluster_df.empty else cluster_df
     lines.append(_table(q2, cols))
 
-    lines.append("\n### Solid core, fuzzy edges\n")
-    lines.append("_A clear agreed core, but wide disagreement at the margins (high edge/core ratio)._\n")
+    lines.append("\n### Agreed core with fuzzy edges\n")
+    lines.append("_Among clusters with at least a modest agreed core (core ≥15% of the drawn union), those whose disagreement is concentrated at the margins (high edge/core ratio). A low core_union_ratio means even the 'core' is only loosely agreed._\n")
     if not cluster_df.empty:
         core = cluster_df[cluster_df["core_union_ratio"] >= 0.15]
         q2b = core.sort_values("edge_core_ratio", ascending=False)
@@ -128,8 +128,27 @@ def render_report(stats, cluster_df, contested_df, snapshot_date):
     lines.append(_table(q2b, cols))
 
     lines.append("\n## Q3 — Contested turf (different name, same shape)\n")
-    lines.append("_Same ground, different names — where submissions overlap heavily but disagree on the name._\n")
-    lines.append(_table(contested_df, ["label_a", "label_b", "overlap_count", "mean_iou"]))
+    q3_cols = ["label_a", "label_b", "overlap_count", "mean_iou"]
+    if contested_df.empty:
+        lines.append("_No cross-name overlaps found._\n")
+    else:
+        variant_mask = contested_df.apply(
+            lambda r: looks_like_same_name(r["label_a"], r["label_b"]), axis=1
+        )
+        distinct_df = contested_df[~variant_mask]
+        variant_df = contested_df[variant_mask]
+        lines.append(
+            "_Same ground, genuinely different names — potential naming disputes. "
+            "Automatic filtering cannot catch nicknames (e.g. 'Roncy' for "
+            "Roncesvalles), so eyeball these before quoting them._\n"
+        )
+        lines.append(_table(distinct_df, q3_cols))
+        lines.append("\n### Same area under a variant or sub-name\n")
+        lines.append(
+            "_High overlap where one label is a nickname or sub-area of the other "
+            "(e.g. Parkdale / South Parkdale) — the same place, not a dispute._\n"
+        )
+        lines.append(_table(variant_df, q3_cols))
 
     return "\n".join(lines)
 
