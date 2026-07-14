@@ -55,3 +55,30 @@ def test_apply_merges_with_no_groups_is_identity():
     ids = [0, 1]
     labels = {0: "A", 1: "B"}
     assert apply_merges(ids, labels, []) == (ids, labels)
+
+
+def test_apply_merges_tolerates_a_duplicated_label_in_one_group():
+    # a copy-paste slip in the hand-edited merges.yaml must not crash the pipeline
+    ids = [0, 1]
+    labels = {0: "Parkdale", 1: "Other"}
+    new_ids, new_labels = apply_merges(ids, labels, [["Parkdale", "Parkdale"]])
+    assert set(new_ids) <= set(new_labels)          # no dangling ids
+    assert new_labels[new_ids[0]] == "Parkdale"
+
+
+def test_apply_merges_handles_a_label_reused_across_groups():
+    ids = [0, 1, 2]
+    labels = {0: "A", 1: "B", 2: "C"}
+    new_ids, new_labels = apply_merges(ids, labels, [["A", "B"], ["C", "A"]])
+    assert set(new_ids) <= set(new_labels)          # no dangling ids -> no KeyError
+    assert len(set(new_ids)) == 1                    # overlapping groups collapse to one
+
+
+def test_apply_merges_never_leaves_an_id_without_a_label():
+    # THE invariant build_clusters depends on: labels[cid] must never KeyError.
+    ids = [0, 1, 2, 3]
+    labels = {0: "A", 1: "B", 2: "C", 3: "D"}
+    groups = [["A", "B"], ["B", "C"], ["D", "A"]]    # deliberately tangled
+    new_ids, new_labels = apply_merges(ids, labels, groups)
+    for cid in new_ids:
+        assert cid in new_labels
