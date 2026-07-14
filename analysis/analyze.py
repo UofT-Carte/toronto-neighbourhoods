@@ -9,6 +9,7 @@ from geometry import parse_polygon, to_utm, mean_pairwise_iou, agreement_surface
 from contested import contested_pairs, looks_like_same_name
 from export_viz import export_viz
 from merges import load_merges, apply_merges
+from relations import build_relations
 
 # ---- Config (tune here) ----------------------------------------------------
 NAME_SIM_THRESHOLD = 90
@@ -18,6 +19,22 @@ IOU_THRESHOLD = 0.5
 MIN_AREA_M2 = 10_000       # 1 hectare floor
 MAX_AREA_M2 = 200_000_000  # 200 km^2 ceiling
 TOP_N = 15
+
+# ---- Name relations (see docs spec: two channels, no clustering) ------------
+REL_CFG = {
+    "coloc_min": 0.15,            # IoU floor for "same ground"
+    "contain_min": 0.70,          # containment floor — IoU is blind to nesting
+    "same_extent_min": 0.55,      # BOTH containments must clear this
+    "ratio_lo": 0.6,
+    "ratio_hi": 1.67,
+    "same_extent_coloc_min": 0.35,
+    "nested_hi": 0.80,            # one side well inside the other...
+    "nested_lo": 0.60,            # ...and the other side NOT
+    "min_drawings": 3,            # below this, abstain — no exceptions
+    "bootstrap_n": 400,
+    "stability_min": 0.80,        # verdict must survive 80% of resamples
+    "max_mentions": 4,            # >=4 mentions = enumerating neighbours
+}
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(HERE, "data")
 OUT_DIR = os.path.join(HERE, "out")
@@ -57,7 +74,7 @@ def build_clusters(subs):
         "n_clusters": len(set(ids)),
         "date_range": date_range,
     }
-    return prepared, stats
+    return prepared, stats, ids, labels
 
 
 def cluster_metrics(prepared):
@@ -89,6 +106,68 @@ def _table(df, cols):
         return "_No rows._\n"
     view = df[cols].head(TOP_N)
     return view.to_markdown(index=False) + "\n"
+
+
+def render_relations(rel, unresolved):
+    """The 2x2 is the product: declarations generate candidates, geometry adjudicates.
+    Neither channel works alone."""
+    lines = ["\n## Name relations\n"]
+    if rel.empty:
+        return "\n".join(lines + ["_No candidate pairs._\n"])
+
+    declared = rel["declared_weight"] > 0
+    colocated = rel["verdict"].isin(["SAME_EXTENT", "NESTED", "OVERLAPPING"])
+
+    lines.append(
+        "_Two independent channels. **Declarations** (`otherNamesText`) generate "
+        "candidates — high recall, low precision: people answer \"other names for "
+        "this area\" with **neighbours**. **Geometry** adjudicates. Neither works alone._\n"
+    )
+    lines.append("\n### Declared × co-located\n")
+    lines.append(
+        f"|  | geometry: same ground | geometry: NOT same ground |\n"
+        f"|---|---|---|\n"
+        f"| **humans declared it** | **{int((declared & colocated).sum())}** — confirmed relations |"
+        f" **{int((declared & ~colocated).sum())}** — neighbour declarations |\n"
+        f"| **nobody declared it** | {int((~declared & colocated).sum())} — candidate co-locations |"
+        f" {int((~declared & ~colocated).sum())} — nothing |\n"
+    )
+
+    cols = ["label_a", "label_b", "n_a", "n_b", "declared_weight",
+            "verdict", "coloc", "coloc_rel", "c_ab", "c_ba"]
+
+    lines.append("\n### Confirmed relations (declared AND co-located)\n")
+    lines.append(_table(rel[declared & colocated], cols))
+
+    lines.append("\n### Neighbour declarations (declared but NOT the same ground)\n")
+    lines.append(
+        "_People answering the 'other names' question with the name of the place "
+        "next door. This is why declarations alone cannot be trusted._\n"
+    )
+    lines.append(_table(rel[declared & ~colocated], cols))
+
+    lines.append("\n### Nested (one name well inside another)\n")
+    lines.append(_table(rel[rel["verdict"] == "NESTED"], cols))
+
+    und = rel[rel["verdict"] == "UNDETERMINED"]
+    lines.append("\n### Undetermined — the recruitment list\n")
+    lines.append(
+        f"_**{len(und)} pairs cannot be judged from the data we have.** This is the "
+        "honest answer, not a failure: it names exactly which neighbourhoods need "
+        "more drawings before the question becomes answerable. Ranked by how close "
+        "they are to the threshold._\n"
+    )
+    lines.append(_table(und.sort_values(["declared_weight", "n_a"], ascending=False), cols))
+
+    if not unresolved.empty:
+        lines.append("\n### Declared names nobody drew\n")
+        lines.append(
+            "_These names exist only in other people's `otherNamesText`. They have no "
+            "drawings, so they can never be tested._\n"
+        )
+        lines.append(_table(unresolved, ["from_label", "text"]))
+
+    return "\n".join(lines)
 
 
 def render_report(stats, cluster_df, contested_df, snapshot_date):
@@ -165,26 +244,34 @@ def main():
     path = snaps[-1]
     snapshot_date = os.path.basename(path).replace("snapshot-", "").replace(".json", "")
     subs = load_submissions(path)
-    prepared, stats = build_clusters(subs)
+    prepared, stats, ids_all, labels_all = build_clusters(subs)
     cluster_df = cluster_metrics(prepared)
     contested_recs = [
         {"cluster_id": r["cluster_id"], "label": r["label"], "poly": r["poly_utm"]}
         for r in prepared
     ]
     contested_df = pd.DataFrame(contested_pairs(contested_recs, IOU_THRESHOLD))
+    rel_df, unresolved_df = build_relations(prepared, subs, ids_all, labels_all, REL_CFG)
+
     md = render_report(stats, cluster_df, contested_df, snapshot_date)
+    md += "\n" + render_relations(rel_df, unresolved_df)
 
     os.makedirs(OUT_DIR, exist_ok=True)
     with open(os.path.join(OUT_DIR, f"report-{snapshot_date}.md"), "w") as f:
         f.write(md)
     cluster_df.to_csv(os.path.join(OUT_DIR, f"clusters-{snapshot_date}.csv"), index=False)
     contested_df.to_csv(os.path.join(OUT_DIR, f"contested-{snapshot_date}.csv"), index=False)
+    rel_df.to_csv(os.path.join(OUT_DIR, f"relations-{snapshot_date}.csv"), index=False)
+    unresolved_df.to_csv(
+        os.path.join(OUT_DIR, f"unresolved-mentions-{snapshot_date}.csv"), index=False)
 
     viz_index = export_viz(prepared, cluster_df, snapshot_date, OUT_DIR, GRID_RES)
 
     print(f"Wrote report + CSVs to {OUT_DIR} (snapshot {snapshot_date})")
     print(f"Wrote viz data for {len(viz_index['neighbourhoods'])} neighbourhoods "
           f"to {os.path.join(OUT_DIR, 'viz')}")
+    n_und = int((rel_df["verdict"] == "UNDETERMINED").sum()) if not rel_df.empty else 0
+    print(f"Wrote {len(rel_df)} name-relation rows ({n_und} undetermined)")
 
 
 if __name__ == "__main__":
