@@ -105,3 +105,21 @@ def test_verdict_is_undetermined_when_drawings_genuinely_disagree():
     b = _jittered(0, 0, 400, 3) + _jittered(3000, 3000, 400, 3)
     out = verdict(a, b, CFG, rng)
     assert out["verdict"] == "UNDETERMINED"
+
+
+def test_asymmetric_containment_is_nested_not_same_extent():
+    # REAL numbers from the snapshot: South Parkdale / Parkdale.
+    # lo=0.59 sits inside the overlap of the SAME_EXTENT (>=0.55) and NESTED
+    # (<=0.60) bands. NESTED must win: this is the textbook sub-area case the
+    # module exists to catch, and SAME_EXTENT is the opposite conclusion.
+    s = {"coloc": 0.56, "c_ab": 0.92, "c_ba": 0.59, "ratio": 0.68,
+         "self_a": 0.5, "self_b": 0.5, "coloc_rel": 1.1, "n_a": 4, "n_b": 46}
+    assert classify(s, CFG) == "NESTED"
+
+
+def test_a_truly_coextensive_pair_is_still_same_extent():
+    # Guard the reorder: NESTED-first must NOT steal genuinely co-extensive pairs.
+    # A co-extensive pair has a HIGH smaller-containment, so it cannot match NESTED.
+    s = {"coloc": 0.85, "c_ab": 0.95, "c_ba": 0.90, "ratio": 1.02,
+         "self_a": 0.5, "self_b": 0.5, "coloc_rel": 1.7, "n_a": 8, "n_b": 8}
+    assert classify(s, CFG) == "SAME_EXTENT"

@@ -6,39 +6,78 @@ from declarations import declared_pairs
 
 
 def _median(xs):
-    return float(np.median(xs)) if len(xs) else None
+    arr = np.asarray(xs, dtype=float)
+    return float(np.median(arr)) if arr.size else None
 
 
-def _self_iou(polys):
-    """Median WITHIN-name pairwise IoU: how coherently is this name drawn at all?
+class _Pair:
+    """Precomputed geometry for ONE name pair.
+
+    The bootstrap resamples DRAWINGS, not GEOMETRY, so every pairwise iou/
+    containment is computed once here and the resamples merely index into these
+    matrices. Recomputing shapely inside the bootstrap loop made a single 47x46
+    pair take 11 seconds and the full run exceed 10 minutes.
+    """
+
+    def __init__(self, polys_a, polys_b):
+        na, nb = len(polys_a), len(polys_b)
+        self.na, self.nb = na, nb
+
+        self.I = np.zeros((na, nb))
+        self.CA = np.zeros((na, nb))
+        self.CB = np.zeros((na, nb))
+        for i, a in enumerate(polys_a):
+            for j, b in enumerate(polys_b):
+                self.I[i, j] = iou(a, b)
+                self.CA[i, j] = containment(a, b)
+                self.CB[i, j] = containment(b, a)
+
+        self.areas_a = np.array([p.area for p in polys_a])
+        self.areas_b = np.array([p.area for p in polys_b])
+
+        # Within-name IoU matrices, for the self-similarity baselines.
+        # The diagonal is 1.0 (a drawing is identical to itself), which is what a
+        # bootstrap resample containing the same drawing twice must see.
+        self.SA = np.zeros((na, na))
+        for i in range(na):
+            for j in range(i + 1, na):
+                self.SA[i, j] = self.SA[j, i] = iou(polys_a[i], polys_a[j])
+        np.fill_diagonal(self.SA, 1.0)
+
+        self.SB = np.zeros((nb, nb))
+        for i in range(nb):
+            for j in range(i + 1, nb):
+                self.SB[i, j] = self.SB[j, i] = iou(polys_b[i], polys_b[j])
+        np.fill_diagonal(self.SB, 1.0)
+
+
+def _self_from(M, idx):
+    """Median within-name pairwise IoU over the selected drawings.
+
     None when fewer than 2 drawings — no within-name pair exists.
     """
-    n = len(polys)
-    if n < 2:
+    k = len(idx)
+    if k < 2:
         return None
-    vals = [iou(polys[i], polys[j]) for i in range(n) for j in range(i + 1, n)]
-    return _median(vals)
+    sub = M[np.ix_(idx, idx)]
+    return _median(sub[np.triu_indices(k, k=1)])
 
 
-def pair_stats(polys_a, polys_b) -> dict:
-    """Medians over CROSS-PAIRS OF RAW DRAWINGS.
+def _stats(pair, ia, ib) -> dict:
+    sub_i = pair.I[np.ix_(ia, ib)]
+    sub_ca = pair.CA[np.ix_(ia, ib)]
+    sub_cb = pair.CB[np.ix_(ia, ib)]
 
-    Never over aggregated/consensus footprints: aggregating first creates a
-    union-swallows-subset artefact that manufactures fake containment.
-    """
-    ious, c_ab, c_ba = [], [], []
-    for a in polys_a:
-        for b in polys_b:
-            ious.append(iou(a, b))
-            c_ab.append(containment(a, b))
-            c_ba.append(containment(b, a))
+    coloc = _median(sub_i.ravel())
+    c_ab = _median(sub_ca.ravel())
+    c_ba = _median(sub_cb.ravel())
 
-    area_a = _median([p.area for p in polys_a])
-    area_b = _median([p.area for p in polys_b])
+    area_a = _median(pair.areas_a[ia])
+    area_b = _median(pair.areas_b[ib])
     ratio = (area_a / area_b) if (area_a and area_b) else None
 
-    self_a, self_b = _self_iou(polys_a), _self_iou(polys_b)
-    coloc = _median(ious)
+    self_a = _self_from(pair.SA, ia)
+    self_b = _self_from(pair.SB, ib)
 
     # Headline stat: cross-name similarity as a fraction of within-name similarity.
     # None (never NaN/inf/0) when a baseline is missing or zero.
@@ -48,13 +87,18 @@ def pair_stats(polys_a, polys_b) -> dict:
     coloc_rel = (coloc / baseline) if (baseline and coloc is not None) else None
 
     return {
-        "n_a": len(polys_a), "n_b": len(polys_b),
-        "coloc": coloc,
-        "c_ab": _median(c_ab), "c_ba": _median(c_ba),
-        "ratio": ratio,
-        "self_a": self_a, "self_b": self_b,
-        "coloc_rel": coloc_rel,
+        "n_a": int(len(ia)), "n_b": int(len(ib)),
+        "coloc": coloc, "c_ab": c_ab, "c_ba": c_ba, "ratio": ratio,
+        "self_a": self_a, "self_b": self_b, "coloc_rel": coloc_rel,
     }
+
+
+def pair_stats(polys_a, polys_b) -> dict:
+    """Medians over CROSS-PAIRS OF RAW DRAWINGS (never aggregated footprints:
+    aggregating first creates a union-swallows-subset artefact that manufactures
+    fake containment)."""
+    p = _Pair(polys_a, polys_b)
+    return _stats(p, np.arange(p.na), np.arange(p.nb))
 
 
 def classify(stats: dict, cfg: dict) -> str:
@@ -77,14 +121,19 @@ def classify(stats: dict, cfg: dict) -> str:
     if not co_located:
         return "DISTINCT"
 
+    # NESTED is tested FIRST. The bands overlap (same_extent_min=0.55 sits below
+    # nested_lo=0.60), and asymmetric containment is the stronger signal: on real
+    # data South Parkdale/Parkdale (hi=0.92, lo=0.59) satisfies BOTH rules, and
+    # calling it SAME_EXTENT is the opposite editorial conclusion. A genuinely
+    # co-extensive pair has a HIGH lo (~0.9) and so can never match NESTED.
+    if hi >= cfg["nested_hi"] and lo <= cfg["nested_lo"]:
+        return "NESTED"
+
     if (lo >= cfg["same_extent_min"]
             and ratio is not None
             and cfg["ratio_lo"] <= ratio <= cfg["ratio_hi"]
             and coloc >= cfg["same_extent_coloc_min"]):
         return "SAME_EXTENT"
-
-    if hi >= cfg["nested_hi"] and lo <= cfg["nested_lo"]:
-        return "NESTED"
 
     return "OVERLAPPING"
 
@@ -96,20 +145,20 @@ def verdict(polys_a, polys_b, cfg: dict, rng) -> dict:
     for essentially every real pair, so its verdicts would INVERT at the 10,000
     target purely from growing power. Effect sizes shrink around the truth instead.
     """
-    stats = pair_stats(polys_a, polys_b)
+    p = _Pair(polys_a, polys_b)
+    stats = _stats(p, np.arange(p.na), np.arange(p.nb))
     point = classify(stats, cfg)
 
-    n_a, n_b = len(polys_a), len(polys_b)
-    if min(n_a, n_b) < cfg["min_drawings"]:
+    if min(p.na, p.nb) < cfg["min_drawings"]:
         # The bootstrap is VACUOUS here: resampling one drawing returns that same
         # drawing and reports fake certainty. The n-floor is what catches this.
         return {"verdict": "UNDETERMINED", "stability": None, "stats": stats}
 
     agree = 0
     for _ in range(cfg["bootstrap_n"]):
-        ra = [polys_a[i] for i in rng.integers(0, n_a, n_a)]
-        rb = [polys_b[i] for i in rng.integers(0, n_b, n_b)]
-        if classify(pair_stats(ra, rb), cfg) == point:
+        ia = rng.integers(0, p.na, p.na)
+        ib = rng.integers(0, p.nb, p.nb)
+        if classify(_stats(p, ia, ib), cfg) == point:
             agree += 1
     stability = agree / cfg["bootstrap_n"]
 
