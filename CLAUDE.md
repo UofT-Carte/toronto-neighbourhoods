@@ -10,7 +10,18 @@ npm run build        # Build to dist/
 npm run preview      # Serve the production build locally
 npm run lint         # TypeScript type-check (tsc --noEmit)
 npm run og:generate  # Regenerate public/og-image.png (Playwright + sharp)
+
+npm run explore      # Fetch a fresh snapshot, run the analysis, launch the dashboard
+npm run analysis     # Fetch + analyse only (= analysis:fetch && analysis:analyze)
+npm run dashboard    # Launch the dashboard only (uses the last analysis output)
 ```
+
+`npm run explore` is the usual entry point for the analysis side: it pulls a
+fresh Firestore snapshot, regenerates the report/CSVs/map data, then serves
+the submissions dashboard (`/`) and the agreement heatmap (`/heatmap`) on
+localhost:4321. The fetch needs application-default credentials
+(`gcloud auth application-default login`); use `npm run dashboard` alone to
+browse the last generated output without re-fetching. See `analysis/README.md`.
 
 `npm run lint` is type-checking only. ESLint (`eslint.config.mjs`) is configured solely for the Firebase security rules plugin, not for the app source.
 

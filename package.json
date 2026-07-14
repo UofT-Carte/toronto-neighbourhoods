@@ -10,7 +10,11 @@
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "og:generate": "tsx scripts/generate-og-image.ts",
-    "dashboard": "node dashboard/server.mjs"
+    "analysis:fetch": "node analysis/fetch_snapshot.mjs",
+    "analysis:analyze": "cd analysis && uv run analyze.py",
+    "analysis": "npm run analysis:fetch && npm run analysis:analyze",
+    "dashboard": "node dashboard/server.mjs",
+    "explore": "npm run analysis && npm run dashboard"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.14",

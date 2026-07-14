@@ -109,5 +109,6 @@ app.get('/', (_req, res) => {
 });
 
 app.listen(PORT, '127.0.0.1', () => {
-  console.log(`\n  Submissions dashboard running at http://localhost:${PORT}\n`);
+  console.log(`\n  Submissions   http://localhost:${PORT}/`);
+  console.log(`  Heatmap       http://localhost:${PORT}/heatmap\n`);
 });

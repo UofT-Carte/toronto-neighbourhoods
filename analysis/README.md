@@ -3,11 +3,23 @@
 Preliminary analysis of crowdsourced neighbourhood submissions across a
 name-agreement × shape-agreement grid.
 
-## Run (two commands)
+## Run (one command)
 
 ```bash
-node analysis/fetch_snapshot.mjs      # dumps analysis/data/snapshot-YYYY-MM-DD.json
-uv run analysis/analyze.py            # writes analysis/out/report-YYYY-MM-DD.md + CSVs
+npm run explore     # fetch → analyse → launch the dashboard
+```
+
+That pulls a fresh snapshot, regenerates the report/CSVs/map data, and serves
+the submissions dashboard (`/`) and the agreement heatmap (`/heatmap`) at
+http://localhost:4321.
+
+The pieces are also available on their own:
+
+```bash
+npm run analysis          # fetch + analyse, no dashboard
+npm run analysis:fetch    # dump analysis/data/snapshot-YYYY-MM-DD.json
+npm run analysis:analyze  # write analysis/out/report-YYYY-MM-DD.md + CSVs + viz/
+npm run dashboard         # serve the last generated output (no re-fetch)
 ```
 
 The fetch needs application-default credentials for the Firebase project
@@ -37,7 +49,7 @@ cd analysis && uv run pytest -q
 `analyze.py` also writes the map data to `out/viz/`. To explore it:
 
 ```bash
-node dashboard/server.mjs
+npm run explore     # or `npm run dashboard` to skip re-fetching
 # then open http://localhost:4321/heatmap
 ```
 
