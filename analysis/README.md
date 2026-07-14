@@ -30,6 +30,45 @@ The fetch needs application-default credentials for the Firebase project
 All thresholds are in the config block at the top of `analyze.py`
 (`NAME_SIM_THRESHOLD`, `GRID_RES`, `MIN_MEMBERS`, `IOU_THRESHOLD`, area bounds).
 
+## Name relations
+
+`analyze.py` also emits `out/relations-<date>.csv` — which neighbourhood **names**
+refer to the same ground, which are nested, and which are merely neighbours.
+
+Two independent evidence channels, never fused into one score:
+
+- **Declarations** (`otherNamesText`) generate candidate pairs. High recall,
+  **low precision**: roughly half of what people offer as an "other name for this
+  area" is actually the name of the place *next door*. The Annex ~ Seaton Village
+  was declared by 7 people and shares essentially no ground.
+- **Geometry** adjudicates them, using medians over cross-pairs of **raw drawings**
+  (never over aggregated footprints, which manufacture fake containment).
+
+There is **no clustering anywhere** — the pair is the unit of analysis, so nothing
+can chain. Verdicts are **effect sizes with a bootstrap stability gate**, not
+significance tests: a significance test's answers would invert at the 10,000
+submission target purely from growing statistical power.
+
+### What it will not tell you
+
+- **It never says "alias" or "subset".** That is not identifiable from this data —
+  the human-*declared* alias (The Village / Church-Wellesley) is geometrically
+  **more nested** than the nominal sub-area (South Parkdale / Parkdale). It reports
+  the geometric fact (`SAME_EXTENT` / `NESTED` / `OVERLAPPING` / `DISTINCT`); you
+  supply the noun.
+- **`UNDETERMINED` is the biggest bucket, and that is correct.** It doubles as a
+  recruitment list: exactly which neighbourhoods need more drawings before the
+  question can be answered at all.
+- **Generic head-nouns only count as standalone answers.** "The Village", "The Beach"
+  and "Downtown" are keyed by their bare noun, so they are only matched when someone
+  offers them *as* the answer — not mid-prose and not inside a longer name. This is
+  what stops "Guildwood **Village**" and "Sugar **Beach**" from fabricating
+  declarations nobody made, but it also means an in-prose mention ("some call it the
+  Beach") is missed, and "The Gay Village" is not resolved to The Village.
+
+Thresholds live in `REL_CFG` in `analyze.py`. `merges.yaml` holds hand-curated,
+name-only cluster merges (no geometry, so not circular).
+
 ## Tests
 
 ```bash
