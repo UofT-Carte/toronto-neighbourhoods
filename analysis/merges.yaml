@@ -1,0 +1,18 @@
+# Hand-curated cluster merges.
+#
+# These are PURE NAME judgements — no geometry is involved — so applying them is
+# not circular. They exist because the fuzzy name-clustering (rapidfuzz ratio @90)
+# is a spell-checker, not an alias detector: it merges typos ("annexe",
+# "leslievilld") but correctly refuses to merge genuinely different strings that
+# happen to denote one place.
+#
+# Each group merges into its FIRST label. Every group MUST carry a reason.
+groups:
+  - labels: ["Church-Wellesley", "Church and Wellesley", "Church-Wellesley Village"]
+    reason: "One neighbourhood, three spellings. Splitting it starves the flagship example (n=3+1+1)."
+
+  - labels: ["Old town", "old town toronto"]
+    reason: "Same place; the second is just the first with the city appended."
+
+  - labels: ["Yonge & Eglinton", "Yonge and Eg"]
+    reason: "Same intersection; 'Eg' is the common local abbreviation."

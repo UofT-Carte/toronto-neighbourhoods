@@ -8,6 +8,7 @@ from names import assign_clusters
 from geometry import parse_polygon, to_utm, mean_pairwise_iou, agreement_surface
 from contested import contested_pairs, looks_like_same_name
 from export_viz import export_viz
+from merges import load_merges, apply_merges
 
 # ---- Config (tune here) ----------------------------------------------------
 NAME_SIM_THRESHOLD = 90
@@ -20,6 +21,7 @@ TOP_N = 15
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(HERE, "data")
 OUT_DIR = os.path.join(HERE, "out")
+MERGES_PATH = os.path.join(HERE, "merges.yaml")
 
 
 def load_submissions(path):
@@ -30,6 +32,8 @@ def load_submissions(path):
 def build_clusters(subs):
     raw_names = [s.get("neighborhoodName", "") for s in subs]
     ids, labels = assign_clusters(raw_names, threshold=NAME_SIM_THRESHOLD)
+    # Curated name-only merges (fixes fragmentation the fuzzy matcher can't see).
+    ids, labels = apply_merges(ids, labels, load_merges(MERGES_PATH))
     prepared = []
     dropped_no_polygon = 0
     dropped_degenerate = 0
