@@ -84,6 +84,13 @@
   let selectedSlug = null;
   let sortKey = 'member_count';
   let sortDir = -1; // -1 desc, 1 asc
+  let showMembers = false;
+
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, (c) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]),
+    );
+  }
 
   function showError(msg, hint) {
     const el = document.getElementById('error');
@@ -172,6 +179,7 @@
         },
       });
 
+      applyMemberVisibility();
       wireHover();
 
       if (neighbourhoods.length) select(neighbourhoods[0].slug);
@@ -196,6 +204,11 @@
     });
   }
 
+  function applyMemberVisibility() {
+    if (!map || !map.getLayer('members')) return;
+    map.setLayoutProperty('members', 'visibility', showMembers ? 'visible' : 'none');
+  }
+
   function current() {
     return neighbourhoods.find((n) => n.slug === selectedSlug) ?? null;
   }
@@ -209,6 +222,7 @@
       const x = a[sortKey], y = b[sortKey];
       if (typeof x === 'string') return x.localeCompare(y) * sortDir;
       // nulls always sort last
+      if (x === null && y === null) return 0;
       if (x === null) return 1;
       if (y === null) return -1;
       return (x - y) * sortDir;
@@ -223,7 +237,7 @@
 
     const body = sorted().map((n) => `
       <tr class="row ${n.slug === selectedSlug ? 'selected' : ''}" data-slug="${n.slug}">
-        <td>${n.label}</td>
+        <td>${escapeHtml(n.label)}</td>
         <td class="num">${n.member_count}</td>
         <td class="num">${fmt(n.core_union_ratio, 3)}</td>
         <td class="num">${fmt(n.mean_pairwise_iou, 3)}</td>
@@ -250,7 +264,7 @@
     const el = document.getElementById('stats');
     if (!n) { el.innerHTML = '<h2>—</h2><div>Select a neighbourhood</div>'; return; }
     el.innerHTML = `
-      <h2>${n.label}</h2>
+      <h2>${escapeHtml(n.label)}</h2>
       <div><span>drawings</span><b>${n.member_count}</b></div>
       <div><span>core / union</span><b>${fmt(n.core_union_ratio, 3)}</b></div>
       <div><span>mean pairwise IoU</span><b>${fmt(n.mean_pairwise_iou, 3)}</b></div>
@@ -272,6 +286,9 @@
       return showError(`Failed to load ${slug}.`, String(err));
     }
 
+    // A newer selection may have been made while this fetch was in flight.
+    if (slug !== selectedSlug) return;
+
     map.getSource('nb').setData(fc);
     const n = current();
     if (n) {
@@ -283,7 +300,8 @@
 
   document.getElementById('filter').addEventListener('input', renderList);
   document.getElementById('toggle-members').addEventListener('change', (e) => {
-    map.setLayoutProperty('members', 'visibility', e.target.checked ? 'visible' : 'none');
+    showMembers = e.target.checked;
+    applyMemberVisibility();
   });
 
   boot();
