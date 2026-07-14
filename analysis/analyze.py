@@ -44,6 +44,7 @@ CAMP_CFG = {
     "min_camp": 3,          # a stray pair is not a camp
     "min_balance": 0.25,    # the smaller camp must be >= 1/4 of the larger
     "max_between": 0.10,    # two PLACES share essentially no ground
+    "max_contain": 0.50,    # neither camp may lie inside the other -- IoU can't see nesting
     "min_stability": 0.85,  # the same partition must recur under resampling
     "bootstrap_n": 200,
 }
@@ -217,6 +218,7 @@ def render_camps(camps_by_cid, labels, polys_by_cid):
             "n": r["n"],
             "camps": f'{r["sizes"][0]} / {r["sizes"][1]}',
             "between_iou": round(r["between_iou"], 3),
+            "cross_contain": round(r["cross_contain"], 3),
             "within_iou": round(r["within_iou"], 3),
             "stability": round(r["stability"], 2),
         })
@@ -235,7 +237,8 @@ def render_camps(camps_by_cid, labels, polys_by_cid):
         lines.append("_None detected._\n")
         return "\n".join(lines)
     lines.append(_table(pd.DataFrame(rows),
-                        ["name", "n", "camps", "between_iou", "within_iou", "stability"]))
+                        ["name", "n", "camps", "between_iou", "cross_contain",
+                         "within_iou", "stability"]))
     return "\n".join(lines)
 
 

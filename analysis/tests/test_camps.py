@@ -4,7 +4,7 @@ from camps import split_camps, detect_all
 from tests.fixtures import unit_square
 
 CFG = {"min_camp": 3, "min_balance": 0.25, "max_between": 0.10,
-       "min_stability": 0.85, "bootstrap_n": 60}
+       "max_contain": 0.50, "min_stability": 0.85, "bootstrap_n": 60}
 
 
 def _cluster(x0, y0, size, k, step=8.0):
@@ -52,6 +52,22 @@ def test_overlapping_camps_are_not_contested():
     out = split_camps(a + b, CFG)
     assert out["verdict"] == "NOT_CONTESTED"
     assert out["reason"] == "camps_overlap"
+
+
+def test_a_nested_camp_is_not_two_places():
+    # A SCALE disagreement, not two places: some people draw the name big, some
+    # small, and the small one sits INSIDE the big one. IoU CANNOT SEE THIS -- a
+    # small polygon inside a large one has LOW IoU while sharing all of its ground.
+    # This is exactly how the real "Willowdale" (3 drawings at 11.5 km2, 3 at
+    # 0.8 km2, one wholly inside the other) slipped through an IoU-only gate and
+    # was almost reported as a second "two places, one name" finding.
+    big = _cluster(0, 0, 1200, 4)
+    small = _cluster(400, 400, 300, 4)      # entirely inside the big ones
+    out = split_camps(big + small, CFG)
+    assert out["between_iou"] <= CFG["max_between"]   # IoU alone would let it pass...
+    assert out["cross_contain"] > 0.9                 # ...but one camp IS the other's ground
+    assert out["verdict"] == "NOT_CONTESTED"
+    assert out["reason"] == "camps_nested"
 
 
 def test_too_few_drawings_to_have_two_camps():

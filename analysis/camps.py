@@ -4,7 +4,7 @@ import numpy as np
 from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.spatial.distance import squareform
 
-from geometry import iou
+from geometry import containment, iou
 
 
 def _distances(polys):
@@ -52,7 +52,7 @@ def split_camps(polys, cfg: dict, rng=None) -> dict:
     out = {
         "n": n, "verdict": "NOT_CONTESTED", "reason": "too_few", "camps": None,
         "sizes": None, "balance": None, "within_iou": None,
-        "between_iou": None, "stability": None,
+        "between_iou": None, "stability": None, "cross_contain": None,
     }
     if n < 2 * cfg["min_camp"]:
         return out
@@ -73,6 +73,15 @@ def split_camps(polys, cfg: dict, rng=None) -> dict:
     within = float(np.mean(within_pairs)) if within_pairs else None
     between = float(np.mean(between_pairs)) if between_pairs else None
 
+    # Two PLACES sit side by side. If one camp lies INSIDE the other, that is a
+    # SCALE disagreement about one place, not two places -- and IoU cannot see it:
+    # a small polygon inside a big one has LOW IoU while sharing all of its ground.
+    # (Real case: "Willowdale", 3 drawings at 11.5 km2 and 3 at 0.8 km2, one wholly
+    # inside the other, passed an IoU-only gate at between_iou 0.071.)
+    c_ab = float(np.median([containment(polys[i], polys[j]) for i in a for j in b]))
+    c_ba = float(np.median([containment(polys[j], polys[i]) for i in a for j in b]))
+    cross_contain = max(c_ab, c_ba)
+
     # Stability: does the SAME partition recur on 80% subsamples?
     k = min(n, max(2 * cfg["min_camp"], int(round(0.8 * n))))
     agrees = []
@@ -85,7 +94,8 @@ def split_camps(polys, cfg: dict, rng=None) -> dict:
     stability = float(np.mean(agrees)) if agrees else None
 
     out.update(camps=[int(x) for x in lab], sizes=sizes, balance=balance,
-               within_iou=within, between_iou=between, stability=stability)
+               within_iou=within, between_iou=between, stability=stability,
+               cross_contain=cross_contain)
 
     # A stray pair is not a camp.
     if min(sizes) < cfg["min_camp"] or balance < cfg["min_balance"]:
@@ -94,6 +104,9 @@ def split_camps(polys, cfg: dict, rng=None) -> dict:
     # Two PLACES share no ground. Overlapping halves are disagreement about ONE place.
     if between is None or between > cfg["max_between"]:
         out["reason"] = "camps_overlap"
+        return out
+    if cross_contain > cfg["max_contain"]:
+        out["reason"] = "camps_nested"
         return out
     if stability is None or stability < cfg["min_stability"]:
         out["reason"] = "unstable"
