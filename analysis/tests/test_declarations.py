@@ -86,6 +86,26 @@ def test_arity_gate_drops_neighbour_enumerations():
     assert pairs == {}
 
 
+def test_partially_overlapping_keys_do_not_both_fire():
+    # "Little India" and "India Bazaar" are both real names for the same Gerrard
+    # strip. "Little India Bazaar" must not manufacture TWO relations from one phrase.
+    g = build_gazetteer(["Little India", "India Bazaar"], [10, 20])
+    hits = find_mentions("Little India Bazaar", g, own_cluster=99)
+    assert len(hits) == 1
+
+
+def test_overlapping_keys_sharing_a_middle_token_do_not_both_fire():
+    g = build_gazetteer(["High Park", "Park North"], [100, 200])
+    hits = find_mentions("high park north", g, own_cluster=99)
+    assert len(hits) == 1
+
+
+def test_the_overlap_fix_does_not_break_a_genuine_two_name_list():
+    # Two DISTINCT names in a list don't overlap, so both must still fire.
+    g = build_gazetteer(["Roncesvalles", "Parkdale"], [1, 2])
+    assert find_mentions("Roncesvalles, Parkdale", g, own_cluster=99) == {1, 2}
+
+
 def test_unresolved_mentions_are_captured():
     # "Little Tibet" is a real declared name that NOBODY drew — it can never be
     # tested, and must be quarantined rather than silently dropped.

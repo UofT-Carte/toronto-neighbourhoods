@@ -22,24 +22,39 @@ def build_gazetteer(raw_names, ids) -> dict:
 def find_mentions(text: str, gazetteer: dict, own_cluster: int) -> set:
     """Cluster ids named in a free-text field.
 
-    Matches gazetteer keys as WHOLE PHRASES, LONGEST FIRST, suppressing any hit
-    that falls inside a longer accepted hit. That is what stops "Parkdale" firing
-    inside "South Parkdale", "Beach" inside "The Beaches", and "The Junction"
-    inside "Junction Triangle".
+    Collect every whole-phrase match, then greedily accept them LONGEST-FIRST,
+    then LEFTMOST, rejecting any candidate that OVERLAPS an already-accepted span
+    at all — not merely one nested inside it.
+
+    Nesting-only suppression is not enough: "Little India" and "India Bazaar"
+    partially overlap in the text "Little India Bazaar" without either containing
+    the other, and would otherwise both fire, inventing two relations from one
+    phrase. Overlap suppression also stops "Parkdale" firing inside "South
+    Parkdale", "The Junction" inside "Junction Triangle", and "Beach" inside
+    "The Beaches".
     """
     norm = normalize_name(text or "")
     if norm in JUNK:
         return set()
 
     padded = f" {norm} "
-    hits, spans = set(), []
-    for key in sorted(gazetteer, key=len, reverse=True):
+
+    candidates = []
+    for key, cid in gazetteer.items():
         pattern = r"(?<![a-z0-9])" + re.escape(key) + r"(?![a-z0-9])"
         for m in re.finditer(pattern, padded):
-            if any(m.start() >= s and m.end() <= e for s, e in spans):
-                continue          # inside a longer match already accepted
-            spans.append((m.start(), m.end()))
-            hits.add(gazetteer[key])
+            candidates.append((len(key), m.start(), m.end(), cid))
+
+    # Longest key wins; ties broken by leftmost. Deterministic.
+    candidates.sort(key=lambda c: (-c[0], c[1]))
+
+    hits, spans = set(), []
+    for _length, start, end, cid in candidates:
+        if any(start < e and s < end for s, e in spans):   # ANY overlap
+            continue
+        spans.append((start, end))
+        hits.add(cid)
+
     hits.discard(own_cluster)
     return hits
 
