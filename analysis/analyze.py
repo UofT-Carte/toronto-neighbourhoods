@@ -342,7 +342,8 @@ def main():
     unresolved_df.to_csv(
         os.path.join(OUT_DIR, f"unresolved-mentions-{snapshot_date}.csv"), index=False)
 
-    viz_index = export_viz(prepared, cluster_df, snapshot_date, OUT_DIR, GRID_RES)
+    viz_index = export_viz(prepared, cluster_df, snapshot_date, OUT_DIR, GRID_RES,
+                           camps_by_cid=camps_by_cid, rel_df=rel_df)
 
     print(f"Wrote report + CSVs to {OUT_DIR} (snapshot {snapshot_date})")
     print(f"Wrote viz data for {len(viz_index['neighbourhoods'])} neighbourhoods "

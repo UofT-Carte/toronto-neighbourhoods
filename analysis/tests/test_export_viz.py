@@ -174,3 +174,52 @@ def test_export_viz_prunes_orphaned_files(tmp_path):
 
     assert not stale.exists()                     # orphan removed
     assert (viz / "the-annex.geojson").exists()   # current one written
+
+
+def test_members_carry_a_camp_when_contested():
+    polys = _toronto_squares()                      # 3 polys
+    fc = build_feature_collection(polys, grid_res=50.0, camps=[1, 1, 2])
+    members = _by_kind(fc, "member")
+    assert [m["properties"]["camp"] for m in members] == [1, 1, 2]
+
+    camps = _by_kind(fc, "camp")
+    assert {c["properties"]["camp"] for c in camps} == {1, 2}
+    assert {c["properties"]["n"] for c in camps} == {2, 1}
+
+
+def test_members_have_no_camp_when_not_contested():
+    fc = build_feature_collection(_toronto_squares(), grid_res=50.0, camps=None)
+    for m in _by_kind(fc, "member"):
+        assert m["properties"]["camp"] is None
+    assert _by_kind(fc, "camp") == []          # no camp features at all
+
+
+def test_export_viz_writes_relations_json(tmp_path):
+    import pandas as pd
+    polys = _toronto_squares()
+    prepared = [{"cluster_id": 0, "label": "The Annex", "poly_utm": p} for p in polys]
+    cluster_df = pd.DataFrame([{
+        "cluster_id": 0, "label": "The Annex", "member_count": 3,
+        "core_union_ratio": 0.5, "edge_core_ratio": 1.0,
+        "core_area_km2": 1.0, "union_area_km2": 2.0, "mean_pairwise_iou": 0.4,
+    }])
+    rel_df = pd.DataFrame([{
+        "label_a": "The Annex", "label_b": "Seaton Village", "n_a": 3, "n_b": 9,
+        "declared_weight": 7, "verdict": "DISTINCT", "coloc": 0.008,
+        "child": None, "parent": None, "quotes": "The Annex: Seaton Village",
+    }])
+
+    index = export_viz(prepared, cluster_df, "2026-07-14", str(tmp_path), 50.0,
+                       camps_by_cid=None, rel_df=rel_df)
+
+    rel_path = tmp_path / "viz" / "relations.json"
+    assert rel_path.exists()
+    rel = json.loads(rel_path.read_text())
+    # keyed by the SAME slug the GeoJSON uses, and names the OTHER side
+    assert "the-annex" in rel
+    row = rel["the-annex"][0]
+    assert row["other_label"] == "Seaton Village"
+    assert row["verdict"] == "DISTINCT"
+    assert row["declared_weight"] == 7
+    assert "Seaton Village" in row["quotes"]
+    assert index["neighbourhoods"][0]["contested"] is False
