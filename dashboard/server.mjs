@@ -80,6 +80,17 @@ app.get('/api/viz/index', (_req, res) => {
   });
 });
 
+// Must precede /api/viz/:slug, or the slug pattern swallows "relations".
+app.get('/api/viz/relations', (_req, res) => {
+  const file = join(VIZ_DIR, 'relations.json');
+  if (!existsSync(file)) {
+    return res.status(404).json({ error: 'No relations data found.', hint: NO_VIZ_HINT });
+  }
+  res.sendFile(file, (err) => {
+    if (err) res.status(500).json({ error: String(err.message ?? err) });
+  });
+});
+
 app.get('/api/viz/:slug', (req, res) => {
   const { slug } = req.params;
   if (!/^[a-z0-9-]+$/.test(slug)) {
