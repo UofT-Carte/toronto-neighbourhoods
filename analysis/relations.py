@@ -205,15 +205,21 @@ def build_relations(prepared, subs, ids, labels, cfg):
         out = verdict(pa, pb, cfg, rng)
         s = out["stats"]
 
-        # NESTED is directional -- name the child explicitly. Without this the
-        # reader must infer it from c_ab/c_ba and has a coin-flip chance of
-        # inverting the claim ("Midtown is inside Yonge & Eglinton").
+        # NESTED is directional -- name the child AND give its numbers, or a reader
+        # sees a child's name beside the parent's n and containment and inverts the
+        # claim ("Midtown is inside Yonge & Eglinton").
         child = parent = None
+        n_child = n_parent = None
+        child_in_parent = parent_in_child = None
         if out["verdict"] == "NESTED":
             if (s["c_ab"] or 0) >= (s["c_ba"] or 0):
-                child, parent = labels[a], labels[b]   # more of A is inside B
+                child, parent = labels[a], labels[b]      # more of A sits inside B
+                n_child, n_parent = s["n_a"], s["n_b"]
+                child_in_parent, parent_in_child = s["c_ab"], s["c_ba"]
             else:
                 child, parent = labels[b], labels[a]
+                n_child, n_parent = s["n_b"], s["n_a"]
+                child_in_parent, parent_in_child = s["c_ba"], s["c_ab"]
 
         rows.append({
             "label_a": labels[a], "label_b": labels[b],
@@ -221,6 +227,8 @@ def build_relations(prepared, subs, ids, labels, cfg):
             "declared_weight": ev["weight"],
             "verdict": out["verdict"],
             "child": child, "parent": parent,
+            "n_child": n_child, "n_parent": n_parent,
+            "child_in_parent": child_in_parent, "parent_in_child": parent_in_child,
             "stability": out["stability"],
             "coloc": s["coloc"], "coloc_rel": s["coloc_rel"],
             "c_ab": s["c_ab"], "c_ba": s["c_ba"], "ratio": s["ratio"],

@@ -153,3 +153,29 @@ def test_a_pure_self_mention_is_not_quarantined_as_unresolved():
     pairs, unresolved = declared_pairs(subs, ids, labels)
     assert pairs == {}
     assert unresolved == []
+
+
+def test_ampersand_names_are_not_split_into_fragments():
+    # normalize_name maps "&" -> " and ", so "church and wellesley" IS a real key
+    # (it's what a raw drawn name like "Church & Wellesley" normalises to --
+    # unlike "-" or "/", which normalise to a plain space with no "and").
+    # Splitting on " and " would make it unmatchable AND fabricate a bare "Church"
+    # (a different cluster) -- the exact fabrication bug this guards against.
+    g = build_gazetteer(["Church & Wellesley", "Church"], [1, 2])
+    assert find_mentions("Church & Wellesley", g, own_cluster=99) == {1}
+    assert find_mentions("Church and Wellesley", g, own_cluster=99) == {1}
+
+
+def test_slash_names_are_not_split_into_fragments():
+    g = build_gazetteer(["Church-Wellesley", "Church"], [1, 2])
+    assert find_mentions("Church/Wellesley", g, own_cluster=99) == {1}
+
+
+def test_period_in_a_name_does_not_split_it():
+    g = build_gazetteer(["St. Clair West", "Clair"], [1, 2])
+    assert find_mentions("St. Clair West", g, own_cluster=99) == {1}
+
+
+def test_commas_still_separate_two_offered_names():
+    g = build_gazetteer(["Roncesvalles", "Parkdale"], [1, 2])
+    assert find_mentions("Roncesvalles, Parkdale", g, own_cluster=99) == {1, 2}

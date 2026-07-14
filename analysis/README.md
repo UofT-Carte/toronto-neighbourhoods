@@ -59,6 +59,12 @@ submission target purely from growing statistical power.
 - **`UNDETERMINED` is the biggest bucket, and that is correct.** It doubles as a
   recruitment list: exactly which neighbourhoods need more drawings before the
   question can be answered at all.
+- **Generic head-nouns only count as standalone answers.** "The Village", "The Beach"
+  and "Downtown" are keyed by their bare noun, so they are only matched when someone
+  offers them *as* the answer — not mid-prose and not inside a longer name. This is
+  what stops "Guildwood **Village**" and "Sugar **Beach**" from fabricating
+  declarations nobody made, but it also means an in-prose mention ("some call it the
+  Beach") is missed, and "The Gay Village" is not resolved to The Village.
 
 Thresholds live in `REL_CFG` in `analyze.py`. `merges.yaml` holds hand-curated,
 name-only cluster merges (no geometry, so not circular).

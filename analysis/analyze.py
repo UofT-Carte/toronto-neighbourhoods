@@ -104,7 +104,7 @@ def cluster_metrics(prepared):
 def _table(df, cols):
     if df.empty:
         return "_No rows._\n"
-    view = df[cols].head(TOP_N)
+    view = df[cols].head(TOP_N).fillna("—")
     return view.to_markdown(index=False) + "\n"
 
 
@@ -147,8 +147,8 @@ def render_relations(rel, unresolved):
     cols = ["label_a", "label_b", "n_a", "n_b", "declared_weight",
             "verdict", "coloc", "coloc_rel", "c_ab", "c_ba"]
     declared_cols = cols + ["quotes"]
-    nested_cols = ["child", "parent", "n_a", "n_b", "declared_weight",
-                   "coloc", "c_ab", "c_ba"]
+    nested_cols = ["child", "parent", "n_child", "n_parent", "declared_weight",
+                   "coloc", "child_in_parent", "parent_in_child"]
 
     lines.append("\n### Confirmed relations (declared AND same ground)\n")
     lines.append(_table(rel[declared & colocated], declared_cols))
@@ -175,7 +175,7 @@ def render_relations(rel, unresolved):
         "neighbourhoods need more drawings before the question becomes answerable. "
         "Declared pairs first — those are the ones a human already thinks are related._\n"
     )
-    lines.append(_table(und.sort_values(["declared_weight", "n_a"], ascending=False), cols))
+    lines.append(_table(und.sort_values(["declared_weight", "n_a"], ascending=False), declared_cols))
 
     if not unresolved.empty:
         lines.append("\n### Declared names nobody drew\n")

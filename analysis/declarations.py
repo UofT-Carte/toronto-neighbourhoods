@@ -31,7 +31,14 @@ GENERIC_KEYS = {
 }
 
 # What separates one offered name from the next in free text.
-_PHRASE_SPLIT = re.compile(r"[,;./\n!?]| and | & ")
+# Only delimiters that CANNOT occur inside a normalised gazetteer key.
+# normalize_name strips punctuation, so a key never contains , ; ! ? or a newline.
+# Do NOT add "." , "/" , "&" or " and ": normalize_name maps "&" -> " and ", so 28
+# real keys contain " and " (church and wellesley, yonge and eglinton, jane and
+# finch...). Splitting on those cuts INSIDE legitimate names -- it makes them
+# unmatchable AND fabricates pairs from the fragments ("Church & Wellesley" -> a
+# bare "Church", a different n=1 cluster).
+_PHRASE_SPLIT = re.compile(r"[,;\n!?]")
 
 
 def find_mentions(text: str, gazetteer: dict, own_cluster: int) -> set:

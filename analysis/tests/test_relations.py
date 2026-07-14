@@ -144,3 +144,17 @@ def test_nested_names_the_child_by_containment():
     s = pair_stats(child, parent)          # a=child, b=parent
     assert classify(s, CFG) == "NESTED"
     assert s["c_ab"] > s["c_ba"]           # more of A (the child) is inside B
+
+
+def test_nested_child_relative_stats_match_the_child():
+    # The child's n and containment must travel WITH the child's name. Pairing a
+    # reordered name against an un-reordered number inverts the claim.
+    parent = _jittered(0, 0, 400, 4)
+    child = _jittered(120, 120, 120, 4)
+    s = pair_stats(child, parent)                 # a = child, b = parent
+    assert classify(s, CFG) == "NESTED"
+    # more of A (the child) is inside B (the parent) than vice versa
+    assert s["c_ab"] > s["c_ba"]
+    # so the child-relative containment is c_ab, NOT c_ba
+    assert s["c_ab"] > 0.9
+    assert s["c_ba"] < 0.4
