@@ -2,6 +2,7 @@ import json
 import math
 import os
 import re
+from collections import defaultdict
 
 from shapely.geometry import Point, box, mapping
 from shapely.ops import unary_union
@@ -25,48 +26,69 @@ def _cell(x: float, y: float, grid_res: float):
     return box(x - half, y - half, x + half, y + half)
 
 
+def _round_coords(obj, ndigits: int = 6):
+    """Trim coordinate precision. 6 dp is ~0.1 m — far finer than the grid."""
+    if isinstance(obj, (list, tuple)):
+        return [_round_coords(o, ndigits) for o in obj]
+    if isinstance(obj, float):
+        return round(obj, ndigits)
+    return obj
+
+
+def _geom(geom_utm) -> dict:
+    """Reproject to WGS84 and emit a coordinate-rounded GeoJSON geometry."""
+    g = mapping(to_wgs84(geom_utm))
+    g["coordinates"] = _round_coords(g["coordinates"])
+    return g
+
+
 def build_feature_collection(polys_utm, grid_res: float) -> dict:
     n = len(polys_utm)
     gx, gy, counts, _union = coverage_grid(polys_utm, grid_res)
     xs, ys, cs = gx.ravel(), gy.ravel(), counts.ravel()
 
-    features = []
-    core_cells = {0.5: [], 0.75: []}
-
+    # Group cells by member count. Cells with the same count are merged into a
+    # single (Multi)Polygon: identical information, orders of magnitude fewer
+    # features than one polygon per cell.
+    cells_by_count = defaultdict(list)
     for x, y, c in zip(xs, ys, cs):
         if c == 0:
             continue
-        cell = _cell(float(x), float(y), grid_res)
-        coverage = c / n
+        cells_by_count[int(c)].append(_cell(float(x), float(y), grid_res))
+
+    features = []
+    for count in sorted(cells_by_count):
+        merged = unary_union(cells_by_count[count])
         features.append({
             "type": "Feature",
             "properties": {
                 "kind": "cell",
-                "coverage": round(float(coverage), 4),
-                "count": int(c),
+                "coverage": round(count / n, 4),
+                "count": count,
             },
-            "geometry": mapping(to_wgs84(cell)),
+            "geometry": _geom(merged),
         })
-        if coverage >= 0.5:
-            core_cells[0.5].append(cell)
-        if coverage >= 0.75:
-            core_cells[0.75].append(cell)
 
     for threshold, kind in ((0.5, "core50"), (0.75, "core75")):
-        cells = core_cells[threshold]
+        cells = [
+            cell
+            for count, group in cells_by_count.items()
+            if count / n >= threshold
+            for cell in group
+        ]
         if not cells:
             continue
         features.append({
             "type": "Feature",
             "properties": {"kind": kind, "threshold": threshold},
-            "geometry": mapping(to_wgs84(unary_union(cells))),
+            "geometry": _geom(unary_union(cells)),
         })
 
     for poly in polys_utm:
         features.append({
             "type": "Feature",
             "properties": {"kind": "member"},
-            "geometry": mapping(to_wgs84(poly)),
+            "geometry": _geom(poly),
         })
 
     imax = int(cs.argmax())
@@ -77,7 +99,7 @@ def build_feature_collection(polys_utm, grid_res: float) -> dict:
             "count": int(cs[imax]),
             "member_count": n,
         },
-        "geometry": mapping(to_wgs84(Point(float(xs[imax]), float(ys[imax])))),
+        "geometry": _geom(Point(float(xs[imax]), float(ys[imax]))),
     })
 
     return {"type": "FeatureCollection", "features": features}
@@ -110,6 +132,9 @@ def export_viz(prepared, cluster_df, snapshot_date: str, out_dir: str,
             json.dump(fc, f)
 
         minx, miny, maxx, maxy = to_wgs84(unary_union(polys)).bounds
+        minx, miny, maxx, maxy = (
+            round(minx, 6), round(miny, 6), round(maxx, 6), round(maxy, 6),
+        )
         entries.append({
             "label": str(row["label"]),
             "slug": slug,

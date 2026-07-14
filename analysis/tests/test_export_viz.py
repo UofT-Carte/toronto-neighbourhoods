@@ -57,11 +57,35 @@ def test_peak_is_the_max_coverage_cell():
     assert peak["properties"]["member_count"] == 3
 
 
+def _first_coord(geom):
+    c = geom["coordinates"]
+    while isinstance(c[0], (list, tuple)):
+        c = c[0]
+    return c
+
+
 def test_geometry_is_wgs84_lnglat():
     fc = build_feature_collection(_toronto_squares(), grid_res=50.0)
-    lng, lat = _by_kind(fc, "cell")[0]["geometry"]["coordinates"][0][0]
+    lng, lat = _first_coord(_by_kind(fc, "cell")[0]["geometry"])
     assert -80.0 < lng < -79.0
     assert 43.0 < lat < 44.0
+
+
+def test_cells_are_dissolved_by_count():
+    # 3 members -> at most 3 distinct counts -> at most 3 "cell" features,
+    # not one per 50 m grid cell.
+    fc = build_feature_collection(_toronto_squares(), grid_res=50.0)
+    cells = _by_kind(fc, "cell")
+    assert len(cells) <= 3
+    counts = sorted(c["properties"]["count"] for c in cells)
+    assert counts == sorted(set(counts))     # one feature per distinct count
+
+
+def test_coordinates_are_rounded():
+    fc = build_feature_collection(_toronto_squares(), grid_res=50.0)
+    lng, lat = _first_coord(_by_kind(fc, "cell")[0]["geometry"])
+    assert lng == round(lng, 6)
+    assert lat == round(lat, 6)
 
 
 def test_export_viz_writes_index_and_geojson(tmp_path):
