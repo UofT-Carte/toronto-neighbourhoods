@@ -10,6 +10,7 @@ from contested import contested_pairs, looks_like_same_name
 from export_viz import export_viz
 from merges import load_merges, apply_merges
 from relations import build_relations
+from camps import detect_all
 
 # ---- Config (tune here) ----------------------------------------------------
 NAME_SIM_THRESHOLD = 90
@@ -34,6 +35,17 @@ REL_CFG = {
     "bootstrap_n": 400,
     "stability_min": 0.80,        # verdict must survive 80% of resamples
     "max_mentions": 4,            # >=4 mentions = enumerating neighbours
+}
+
+# ---- Contested locations: one NAME used for two different PLACES --------------
+# NOT silhouette -- silhouette is dominated by outlier peels and ranks a 2-vs-31
+# peel above the one genuine 4-vs-9 split. Balance + near-disjointness is the test.
+CAMP_CFG = {
+    "min_camp": 3,          # a stray pair is not a camp
+    "min_balance": 0.25,    # the smaller camp must be >= 1/4 of the larger
+    "max_between": 0.10,    # two PLACES share essentially no ground
+    "min_stability": 0.85,  # the same partition must recur under resampling
+    "bootstrap_n": 200,
 }
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(HERE, "data")
@@ -193,6 +205,40 @@ def render_relations(rel, unresolved):
     return "\n".join(lines)
 
 
+def render_camps(camps_by_cid, labels, polys_by_cid):
+    """Names used for two different PLACES. Always prints n per camp -- a
+    4-drawing camp is a 4-drawing camp."""
+    rows = []
+    for cid, r in camps_by_cid.items():
+        if r["verdict"] != "CONTESTED":
+            continue
+        rows.append({
+            "name": labels[cid],
+            "n": r["n"],
+            "camps": f'{r["sizes"][0]} / {r["sizes"][1]}',
+            "between_iou": round(r["between_iou"], 3),
+            "within_iou": round(r["within_iou"], 3),
+            "stability": round(r["stability"], 2),
+        })
+    rows.sort(key=lambda x: -x["n"])
+
+    lines = ["\n## Contested locations — one name, two places\n"]
+    lines.append(
+        "_A name whose drawings split into two coherent groups that share "
+        "essentially no ground. This is different from 'low agreement': it is not "
+        "one fuzzy place, it is **two places** under one name. Detected by a "
+        "balanced split with near-zero overlap between the halves, stable under "
+        "resampling — deliberately **not** silhouette, which is dominated by "
+        "outlier drawings._\n"
+    )
+    if not rows:
+        lines.append("_None detected._\n")
+        return "\n".join(lines)
+    lines.append(_table(pd.DataFrame(rows),
+                        ["name", "n", "camps", "between_iou", "within_iou", "stability"]))
+    return "\n".join(lines)
+
+
 def render_report(stats, cluster_df, contested_df, snapshot_date):
     lines = []
     lines.append(f"# Toronto Neighbourhoods — Preliminary Agreement Report ({snapshot_date})\n")
@@ -269,6 +315,10 @@ def main():
     subs = load_submissions(path)
     prepared, stats, ids_all, labels_all = build_clusters(subs)
     cluster_df = cluster_metrics(prepared)
+    polys_by_cid = {}
+    for r in prepared:
+        polys_by_cid.setdefault(r["cluster_id"], []).append(r["poly_utm"])
+    camps_by_cid = detect_all(polys_by_cid, CAMP_CFG)
     contested_recs = [
         {"cluster_id": r["cluster_id"], "label": r["label"], "poly": r["poly_utm"]}
         for r in prepared
@@ -278,6 +328,7 @@ def main():
 
     md = render_report(stats, cluster_df, contested_df, snapshot_date)
     md += "\n" + render_relations(rel_df, unresolved_df)
+    md += "\n" + render_camps(camps_by_cid, labels_all, polys_by_cid)
 
     os.makedirs(OUT_DIR, exist_ok=True)
     with open(os.path.join(OUT_DIR, f"report-{snapshot_date}.md"), "w") as f:
@@ -295,6 +346,10 @@ def main():
           f"to {os.path.join(OUT_DIR, 'viz')}")
     n_und = int((rel_df["verdict"] == "UNDETERMINED").sum()) if not rel_df.empty else 0
     print(f"Wrote {len(rel_df)} name-relation rows ({n_und} undetermined)")
+    contested_names = [labels_all[c] for c, r in camps_by_cid.items()
+                       if r["verdict"] == "CONTESTED"]
+    print(f"Contested locations (one name, two places): {len(contested_names)} — "
+          f"{', '.join(sorted(contested_names)) or 'none'}")
 
 
 if __name__ == "__main__":
