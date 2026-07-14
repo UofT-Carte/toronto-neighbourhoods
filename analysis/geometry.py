@@ -35,6 +35,38 @@ def to_utm(poly_wgs84):
     return shp_transform(lambda x, y, z=None: t.transform(x, y), poly_wgs84)
 
 
+@lru_cache(maxsize=1)
+def _inverse_transformer() -> Transformer:
+    # UTM 17N -> WGS84; always_xy so we get back (lng, lat).
+    return Transformer.from_crs("EPSG:32617", "EPSG:4326", always_xy=True)
+
+
+def to_wgs84(geom_utm):
+    t = _inverse_transformer()
+    return shp_transform(lambda x, y, z=None: t.transform(x, y), geom_utm)
+
+
+def coverage_grid(polys, grid_res: float):
+    """Per-cell member coverage over the union bbox. Polys must be in UTM.
+
+    Returns (gx, gy, counts, union): gx/gy are 2-D cell-centre coordinates,
+    counts[i, j] is how many polys contain that cell centre.
+    """
+    union = unary_union(polys)
+    minx, miny, maxx, maxy = union.bounds
+    xs = np.arange(minx + grid_res / 2, maxx, grid_res)
+    ys = np.arange(miny + grid_res / 2, maxy, grid_res)
+    if xs.size == 0:  # bbox thinner than one cell on this axis
+        xs = np.array([(minx + maxx) / 2])
+    if ys.size == 0:
+        ys = np.array([(miny + maxy) / 2])
+    gx, gy = np.meshgrid(xs, ys)
+    counts = np.zeros(gx.shape, dtype=int)
+    for p in polys:
+        counts += shapely.contains_xy(p, gx, gy)
+    return gx, gy, counts, union
+
+
 def iou(a: Polygon, b: Polygon) -> float:
     inter = a.intersection(b).area
     union = a.area + b.area - inter
@@ -48,24 +80,8 @@ def agreement_surface(polys, grid_res: float) -> dict:
             "member_count": 0, "union_area": 0.0, "core_area": 0.0,
             "edge_area": 0.0, "core_union_ratio": 0.0, "edge_core_ratio": 0.0,
         }
-    union = unary_union(polys)
-    minx, miny, maxx, maxy = union.bounds
+    _, _, counts, union = coverage_grid(polys, grid_res)
     cell_area = grid_res * grid_res
-
-    # Centroid-sample a regular grid over the union bbox, then count member
-    # coverage per cell with vectorized shapely point-in-polygon tests.
-    xs = np.arange(minx + grid_res / 2, maxx, grid_res)
-    ys = np.arange(miny + grid_res / 2, maxy, grid_res)
-    if xs.size == 0:  # bbox thinner than one cell on this axis
-        xs = np.array([(minx + maxx) / 2])
-    if ys.size == 0:
-        ys = np.array([(miny + maxy) / 2])
-    gx, gy = np.meshgrid(xs, ys)
-    gx, gy = gx.ravel(), gy.ravel()
-
-    counts = np.zeros(gx.shape, dtype=int)
-    for p in polys:
-        counts += shapely.contains_xy(p, gx, gy)
 
     covered = counts > 0
     core = counts >= (n / 2.0)
