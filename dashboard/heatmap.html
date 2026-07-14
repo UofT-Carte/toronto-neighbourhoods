@@ -98,11 +98,16 @@
     el.style.display = 'block';
   }
 
+  function hideError() {
+    document.getElementById('error').style.display = 'none';
+  }
+
   function fmt(v, digits) {
     return v === null || v === undefined ? '—' : Number(v).toFixed(digits);
   }
 
   async function boot() {
+    hideError();
     let data;
     try {
       const res = await fetch('/api/viz/index');
@@ -273,6 +278,7 @@
   }
 
   async function select(slug) {
+    hideError();
     selectedSlug = slug;
     renderList();
     renderStats();

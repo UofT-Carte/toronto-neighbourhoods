@@ -121,3 +121,56 @@ def test_export_viz_writes_index_and_geojson(tmp_path):
     assert -80.0 < minx < maxx < -79.0
     assert 43.0 < miny < maxy < 44.0
     assert index == data
+
+
+def test_export_viz_reserves_the_index_slug(tmp_path):
+    polys = _toronto_squares()
+    prepared = [{"cluster_id": 0, "label": "Index", "poly_utm": p} for p in polys]
+    cluster_df = pd.DataFrame([{
+        "cluster_id": 0, "label": "Index", "member_count": 3,
+        "core_union_ratio": 0.5, "edge_core_ratio": 1.0,
+        "core_area_km2": 1.0, "union_area_km2": 2.0, "mean_pairwise_iou": 0.4,
+    }])
+    index = export_viz(prepared, cluster_df, "2026-07-14", str(tmp_path), 50.0)
+    slug = index["neighbourhoods"][0]["slug"]
+    assert slug != "index"
+    assert (tmp_path / "viz" / f"{slug}.geojson").exists()
+
+
+def test_export_viz_disambiguates_colliding_slugs(tmp_path):
+    polys = _toronto_squares()
+    prepared = (
+        [{"cluster_id": 0, "label": "The Annex", "poly_utm": p} for p in polys]
+        + [{"cluster_id": 1, "label": "the annex!", "poly_utm": p} for p in polys]
+    )
+    rows = []
+    for cid, label in ((0, "The Annex"), (1, "the annex!")):
+        rows.append({
+            "cluster_id": cid, "label": label, "member_count": 3,
+            "core_union_ratio": 0.5, "edge_core_ratio": 1.0,
+            "core_area_km2": 1.0, "union_area_km2": 2.0, "mean_pairwise_iou": 0.4,
+        })
+    index = export_viz(prepared, pd.DataFrame(rows), "2026-07-14", str(tmp_path), 50.0)
+    slugs = [n["slug"] for n in index["neighbourhoods"]]
+    assert len(slugs) == len(set(slugs))          # unique
+    for s in slugs:
+        assert (tmp_path / "viz" / f"{s}.geojson").exists()
+
+
+def test_export_viz_prunes_orphaned_files(tmp_path):
+    viz = tmp_path / "viz"
+    viz.mkdir()
+    stale = viz / "old-neighbourhood.geojson"
+    stale.write_text('{"type":"FeatureCollection","features":[]}')
+
+    polys = _toronto_squares()
+    prepared = [{"cluster_id": 0, "label": "The Annex", "poly_utm": p} for p in polys]
+    cluster_df = pd.DataFrame([{
+        "cluster_id": 0, "label": "The Annex", "member_count": 3,
+        "core_union_ratio": 0.5, "edge_core_ratio": 1.0,
+        "core_area_km2": 1.0, "union_area_km2": 2.0, "mean_pairwise_iou": 0.4,
+    }])
+    export_viz(prepared, cluster_df, "2026-07-14", str(tmp_path), 50.0)
+
+    assert not stale.exists()                     # orphan removed
+    assert (viz / "the-annex.geojson").exists()   # current one written

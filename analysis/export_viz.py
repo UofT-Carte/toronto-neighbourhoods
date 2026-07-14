@@ -2,6 +2,7 @@ import json
 import math
 import os
 import re
+import shutil
 from collections import defaultdict
 
 from shapely.geometry import Point, box, mapping
@@ -108,6 +109,10 @@ def build_feature_collection(polys_utm, grid_res: float) -> dict:
 def export_viz(prepared, cluster_df, snapshot_date: str, out_dir: str,
                grid_res: float) -> dict:
     viz_dir = os.path.join(out_dir, "viz")
+    # Rebuild from scratch: cluster labels shift as submissions accumulate, and a
+    # stale <old-slug>.geojson left on disk would still be served — showing numbers
+    # that contradict the current report.
+    shutil.rmtree(viz_dir, ignore_errors=True)
     os.makedirs(viz_dir, exist_ok=True)
 
     by_cluster = {}
@@ -123,8 +128,11 @@ def export_viz(prepared, cluster_df, snapshot_date: str, out_dir: str,
             continue
 
         slug = slugify(str(row["label"]))
-        if slug in used_slugs:
+        # "index" is reserved: /api/viz/index serves the index, not a neighbourhood.
+        if slug == "index" or slug in used_slugs:
             slug = f"{slug}-{cid}"
+        while slug in used_slugs:      # suffixed slug could itself collide
+            slug = f"{slug}-x"
         used_slugs.add(slug)
 
         fc = build_feature_collection(polys, grid_res)
