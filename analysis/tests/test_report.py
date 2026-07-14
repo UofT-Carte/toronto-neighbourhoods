@@ -1,6 +1,6 @@
 import pandas as pd
 
-from analyze import render_report
+from analyze import render_report, render_relations
 
 
 def test_render_report_has_all_sections():
@@ -25,3 +25,24 @@ def test_render_report_has_all_sections():
     assert "Consensus" in md and "Contested boundaries" in md and "Contested turf" in md
     assert "preliminary" in md.lower()
     assert "The Annex" in md and "South Parkdale" in md
+
+
+def test_undetermined_is_never_reported_as_a_neighbour_declaration():
+    # THE regression: a declared pair we CANNOT adjudicate must never be listed as
+    # "not the same ground". Real case — The Beaches ~ Beach: declared by 8 people,
+    # coloc 0.40 (substantial overlap!), but only 2 drawings of "Beach", so the
+    # verdict is UNDETERMINED. Calling that a "neighbour declaration" asserts a
+    # negative we have not earned.
+    rel = pd.DataFrame([{
+        "label_a": "The Beaches", "label_b": "Beach", "n_a": 21, "n_b": 2,
+        "declared_weight": 8, "verdict": "UNDETERMINED", "stability": None,
+        "coloc": 0.40, "coloc_rel": None, "c_ab": 0.5, "c_ba": 0.6,
+        "ratio": 1.0, "self_a": 0.4, "self_b": 0.4, "quotes": "",
+    }])
+    md = render_relations(rel, pd.DataFrame())
+
+    neighbour_section = md.split("### Neighbour declarations")[1].split("\n### ")[0]
+    assert "The Beaches" not in neighbour_section
+
+    recruitment_section = md.split("### Can't tell yet")[1]
+    assert "The Beaches" in recruitment_section

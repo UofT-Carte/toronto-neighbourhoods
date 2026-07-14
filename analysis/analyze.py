@@ -109,53 +109,66 @@ def _table(df, cols):
 
 
 def render_relations(rel, unresolved):
-    """The 2x2 is the product: declarations generate candidates, geometry adjudicates.
-    Neither channel works alone."""
+    """The 2x3 is the product: declarations generate candidates, geometry adjudicates.
+    Abstention gets its OWN column — folding "we can't tell" into "not the same
+    ground" asserts a negative we have not earned."""
     lines = ["\n## Name relations\n"]
     if rel.empty:
         return "\n".join(lines + ["_No candidate pairs._\n"])
 
     declared = rel["declared_weight"] > 0
     colocated = rel["verdict"].isin(["SAME_EXTENT", "NESTED", "OVERLAPPING"])
+    distinct = rel["verdict"] == "DISTINCT"
+    undet = rel["verdict"] == "UNDETERMINED"
 
     lines.append(
         "_Two independent channels. **Declarations** (`otherNamesText`) generate "
         "candidates — high recall, low precision: people answer \"other names for "
         "this area\" with **neighbours**. **Geometry** adjudicates. Neither works alone._\n"
     )
-    lines.append("\n### Declared × co-located\n")
+
+    lines.append("\n### Declared × geometry\n")
     lines.append(
-        f"|  | geometry: same ground | geometry: NOT same ground |\n"
-        f"|---|---|---|\n"
-        f"| **humans declared it** | **{int((declared & colocated).sum())}** — confirmed relations |"
-        f" **{int((declared & ~colocated).sum())}** — neighbour declarations |\n"
+        "_\"Can't tell yet\" is a column, not a footnote. Folding it into \"not the "
+        "same ground\" would assert a negative we have not earned — most of those "
+        "pairs simply have too few drawings on one side._\n"
+    )
+    lines.append(
+        "|  | same ground | NOT the same ground | can't tell yet |\n"
+        "|---|---|---|---|\n"
+        f"| **humans declared it** | **{int((declared & colocated).sum())}** — confirmed |"
+        f" **{int((declared & distinct).sum())}** — neighbour declarations |"
+        f" {int((declared & undet).sum())} — too few drawings |\n"
         f"| **nobody declared it** | {int((~declared & colocated).sum())} — candidate co-locations |"
-        f" {int((~declared & ~colocated).sum())} — nothing |\n"
+        f" {int((~declared & distinct).sum())} |"
+        f" {int((~declared & undet).sum())} |\n"
     )
 
     cols = ["label_a", "label_b", "n_a", "n_b", "declared_weight",
             "verdict", "coloc", "coloc_rel", "c_ab", "c_ba"]
 
-    lines.append("\n### Confirmed relations (declared AND co-located)\n")
+    lines.append("\n### Confirmed relations (declared AND same ground)\n")
     lines.append(_table(rel[declared & colocated], cols))
 
-    lines.append("\n### Neighbour declarations (declared but NOT the same ground)\n")
+    lines.append("\n### Neighbour declarations (declared, and geometry says NOT the same ground)\n")
     lines.append(
-        "_People answering the 'other names' question with the name of the place "
-        "next door. This is why declarations alone cannot be trusted._\n"
+        "_People answering the \"other names for this area\" question with the name of "
+        "the place next door. **Only pairs the geometry could actually adjudicate "
+        "appear here** — pairs with too few drawings are in the recruitment list "
+        "below, not accused of being neighbours._\n"
     )
-    lines.append(_table(rel[declared & ~colocated], cols))
+    lines.append(_table(rel[declared & distinct], cols))
 
     lines.append("\n### Nested (one name well inside another)\n")
     lines.append(_table(rel[rel["verdict"] == "NESTED"], cols))
 
-    und = rel[rel["verdict"] == "UNDETERMINED"]
-    lines.append("\n### Undetermined — the recruitment list\n")
+    und = rel[undet]
+    lines.append("\n### Can't tell yet — the recruitment list\n")
     lines.append(
-        f"_**{len(und)} pairs cannot be judged from the data we have.** This is the "
-        "honest answer, not a failure: it names exactly which neighbourhoods need "
-        "more drawings before the question becomes answerable. Ranked by how close "
-        "they are to the threshold._\n"
+        f"_**{len(und)} of {len(rel)} pairs cannot be judged from the data we have.** "
+        "That is the honest answer, not a failure: it names exactly which "
+        "neighbourhoods need more drawings before the question becomes answerable. "
+        "Declared pairs first — those are the ones a human already thinks are related._\n"
     )
     lines.append(_table(und.sort_values(["declared_weight", "n_a"], ascending=False), cols))
 
