@@ -233,7 +233,11 @@ def build_relations(prepared, subs, ids, labels, cfg):
             "coloc": s["coloc"], "coloc_rel": s["coloc_rel"],
             "c_ab": s["c_ab"], "c_ba": s["c_ba"], "ratio": s["ratio"],
             "self_a": s["self_a"], "self_b": s["self_b"],
-            "quotes": " | ".join(f"{who}: {txt}" for who, txt in ev["quotes"][:3]),
+            # Collapse whitespace: respondents' text contains newlines, which would
+            # shatter a markdown table row and destroy the evidence column.
+            "quotes": " | ".join(
+                f"{who}: {' '.join(txt.split())}" for who, txt in ev["quotes"][:3]
+            ),
         })
 
     rel = pd.DataFrame(rows)

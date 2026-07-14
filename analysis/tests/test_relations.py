@@ -158,3 +158,43 @@ def test_nested_child_relative_stats_match_the_child():
     # so the child-relative containment is c_ab, NOT c_ba
     assert s["c_ab"] > 0.9
     assert s["c_ba"] < 0.4
+
+
+def test_quotes_are_single_line():
+    # Respondents' free text contains newlines. A newline in the quotes column
+    # shatters the markdown table row and destroys the report's evidence column.
+    from relations import build_relations
+    from geometry import parse_polygon, to_utm
+
+    def sq(dlat, dlng):
+        pts = [
+            {"lat": 43.66 + dlat, "lng": -79.41 + dlng},
+            {"lat": 43.68 + dlat, "lng": -79.41 + dlng},
+            {"lat": 43.68 + dlat, "lng": -79.39 + dlng},
+            {"lat": 43.66 + dlat, "lng": -79.39 + dlng},
+        ]
+        return to_utm(parse_polygon(pts))
+
+    subs = [
+        {"neighborhoodName": "Roncesvalles", "otherNamesText": "Roncy\nalso the strip"},
+        {"neighborhoodName": "Roncesvalles", "otherNamesText": "Roncy"},
+        {"neighborhoodName": "Roncy", "otherNamesText": "Roncesvalles"},
+    ]
+    ids = [0, 0, 1]
+    labels = {0: "Roncesvalles", 1: "Roncy"}
+    prepared = [
+        {"cluster_id": 0, "label": "Roncesvalles", "poly_utm": sq(0, 0)},
+        {"cluster_id": 0, "label": "Roncesvalles", "poly_utm": sq(0.001, 0.001)},
+        {"cluster_id": 1, "label": "Roncy", "poly_utm": sq(0.002, 0.002)},
+    ]
+    cfg = {
+        "coloc_min": 0.15, "contain_min": 0.70, "same_extent_min": 0.55,
+        "ratio_lo": 0.6, "ratio_hi": 1.67, "same_extent_coloc_min": 0.35,
+        "nested_hi": 0.80, "nested_lo": 0.60, "min_drawings": 3,
+        "bootstrap_n": 20, "stability_min": 0.80, "max_mentions": 4,
+    }
+    rel, _ = build_relations(prepared, subs, ids, labels, cfg)
+    assert not rel.empty
+    for q in rel["quotes"]:
+        assert "\n" not in q
+        assert "\r" not in q

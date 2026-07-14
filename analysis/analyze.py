@@ -104,8 +104,13 @@ def cluster_metrics(prepared):
 def _table(df, cols):
     if df.empty:
         return "_No rows._\n"
-    view = df[cols].head(TOP_N).fillna("—")
-    return view.to_markdown(index=False) + "\n"
+    view = df[cols].head(TOP_N).copy()
+    # Round BEFORE fillna: filling flips a float column to object dtype, after which
+    # to_markdown stops float-formatting it and prints full precision.
+    for c in view.columns:
+        if pd.api.types.is_float_dtype(view[c]):
+            view[c] = view[c].round(3)
+    return view.fillna("—").to_markdown(index=False) + "\n"
 
 
 def render_relations(rel, unresolved):
