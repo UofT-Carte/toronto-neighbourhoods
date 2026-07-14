@@ -7,6 +7,7 @@ import pandas as pd
 from names import assign_clusters
 from geometry import parse_polygon, to_utm, mean_pairwise_iou, agreement_surface
 from contested import contested_pairs, looks_like_same_name
+from export_viz import export_viz
 
 # ---- Config (tune here) ----------------------------------------------------
 NAME_SIM_THRESHOLD = 90
@@ -174,7 +175,12 @@ def main():
         f.write(md)
     cluster_df.to_csv(os.path.join(OUT_DIR, f"clusters-{snapshot_date}.csv"), index=False)
     contested_df.to_csv(os.path.join(OUT_DIR, f"contested-{snapshot_date}.csv"), index=False)
+
+    viz_index = export_viz(prepared, cluster_df, snapshot_date, OUT_DIR, GRID_RES)
+
     print(f"Wrote report + CSVs to {OUT_DIR} (snapshot {snapshot_date})")
+    print(f"Wrote viz data for {len(viz_index['neighbourhoods'])} neighbourhoods "
+          f"to {os.path.join(OUT_DIR, 'viz')}")
 
 
 if __name__ == "__main__":

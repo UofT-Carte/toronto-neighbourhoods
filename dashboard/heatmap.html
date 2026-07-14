@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Neighbourhood Agreement Heatmap</title>
+  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; color: #1E3765; }
+    #app { display: flex; flex-direction: column; height: 100vh; }
+    header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid #d8dde6; }
+    header h1 { font-size: 16px; margin: 0; }
+    header .snapshot { color: #5b6678; font-size: 13px; }
+    header label { margin-left: auto; font-size: 13px; color: #3a4866; display: flex; align-items: center; gap: 6px; cursor: pointer; }
+    #error { display: none; background: #fdecea; color: #7a271a; border: 1px solid #f3c0bb; padding: 12px 16px; font-size: 14px; }
+    #main { flex: 1; display: flex; min-height: 0; }
+    #panel { width: 380px; border-right: 1px solid #d8dde6; display: flex; flex-direction: column; min-height: 0; }
+    #filter { margin: 10px; padding: 7px 10px; border: 1px solid #d8dde6; border-radius: 6px; font-size: 13px; }
+    #list { flex: 1; overflow-y: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #eef0f4; }
+    th { position: sticky; top: 0; background: #f6f8fb; cursor: pointer; user-select: none; font-size: 12px; }
+    th.num, td.num { text-align: right; }
+    th .arrow { color: #9aa4b5; font-size: 10px; }
+    tr.row { cursor: pointer; }
+    tr.row:hover { background: #f0f6ff; }
+    tr.row.selected { background: #e0edff; font-weight: 600; }
+    #mapwrap { flex: 1; position: relative; min-width: 0; }
+    #map { position: absolute; inset: 0; }
+    #stats { position: absolute; top: 10px; right: 10px; background: rgba(255,255,255,0.95); border: 1px solid #d8dde6;
+             border-radius: 8px; padding: 10px 12px; font-size: 12px; min-width: 210px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+    #stats h2 { margin: 0 0 6px; font-size: 14px; }
+    #stats div { display: flex; justify-content: space-between; gap: 14px; padding: 2px 0; color: #3a4866; }
+    #stats b { color: #1E3765; }
+    #legend { position: absolute; bottom: 14px; left: 14px; background: rgba(255,255,255,0.95); border: 1px solid #d8dde6;
+              border-radius: 8px; padding: 10px 12px; font-size: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+    #ramp { height: 10px; width: 180px; border-radius: 3px; margin: 5px 0 3px;
+            background: linear-gradient(to right, #3b0f70, #8c2981, #de4968, #fe9f6d, #fcfdbf); }
+    #legend .ends { display: flex; justify-content: space-between; color: #5b6678; }
+    #legend .line { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+    #legend .swatch { width: 18px; height: 3px; border-radius: 2px; }
+    .maplibregl-popup-content { font-size: 12px; padding: 7px 10px; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>Neighbourhood Agreement Heatmap</h1>
+      <span class="snapshot" id="snapshot"></span>
+      <label><input type="checkbox" id="toggle-members" /> show individual drawings</label>
+    </header>
+    <p id="error"></p>
+    <div id="main">
+      <div id="panel">
+        <input id="filter" type="search" placeholder="Filter neighbourhoods…" />
+        <div id="list"></div>
+      </div>
+      <div id="mapwrap">
+        <div id="map"></div>
+        <div id="stats"><h2>—</h2><div>Select a neighbourhood</div></div>
+        <div id="legend">
+          <strong>Share of drawings including a block</strong>
+          <div id="ramp"></div>
+          <div class="ends"><span>0%</span><span>100%</span></div>
+          <div class="line"><span class="swatch" style="background:#1f6feb"></span> 50% agree</div>
+          <div class="line"><span class="swatch" style="background:#2ea043"></span> 75% agree</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const COLS = [
+    { key: 'label',             label: 'Neighbourhood', num: false },
+    { key: 'member_count',      label: 'n',             num: true  },
+    { key: 'core_union_ratio',  label: 'core/union',    num: true  },
+    { key: 'mean_pairwise_iou', label: 'mean IoU',      num: true  },
+  ];
+
+  let map = null;
+  let neighbourhoods = [];
+  let selectedSlug = null;
+  let sortKey = 'member_count';
+  let sortDir = -1; // -1 desc, 1 asc
+  let showMembers = false;
+
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, (c) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]),
+    );
+  }
+
+  function showError(msg, hint) {
+    const el = document.getElementById('error');
+    el.textContent = hint ? `${msg} — ${hint}` : msg;
+    el.style.display = 'block';
+  }
+
+  function hideError() {
+    document.getElementById('error').style.display = 'none';
+  }
+
+  function fmt(v, digits) {
+    return v === null || v === undefined ? '—' : Number(v).toFixed(digits);
+  }
+
+  async function boot() {
+    hideError();
+    let data;
+    try {
+      const res = await fetch('/api/viz/index');
+      data = await res.json();
+      if (!res.ok) return showError(data.error ?? 'Failed to load viz index.', data.hint);
+    } catch (err) {
+      return showError('Failed to load viz index.', String(err));
+    }
+    neighbourhoods = data.neighbourhoods ?? [];
+    document.getElementById('snapshot').textContent =
+      `snapshot ${data.snapshot_date} · ${neighbourhoods.length} neighbourhoods`;
+    initMap();
+    renderList();
+  }
+
+  function initMap() {
+    map = new maplibregl.Map({
+      container: 'map',
+      style: '/map-style.json',
+      center: [-79.40, 43.68],
+      zoom: 11,
+    });
+    map.addControl(new maplibregl.NavigationControl(), 'top-left');
+
+    map.on('load', () => {
+      map.addSource('nb', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+
+      map.addLayer({
+        id: 'cells', type: 'fill', source: 'nb',
+        filter: ['==', ['get', 'kind'], 'cell'],
+        paint: {
+          'fill-color': [
+            'interpolate', ['linear'], ['get', 'coverage'],
+            0.0, '#3b0f70',
+            0.25, '#8c2981',
+            0.5, '#de4968',
+            0.75, '#fe9f6d',
+            1.0, '#fcfdbf',
+          ],
+          // opacity rises with agreement so streets stay readable in the faint fringes
+          'fill-opacity': [
+            'interpolate', ['linear'], ['get', 'coverage'],
+            0.0, 0.15,
+            1.0, 0.85,
+          ],
+        },
+      });
+
+      map.addLayer({
+        id: 'members', type: 'line', source: 'nb',
+        filter: ['==', ['get', 'kind'], 'member'],
+        layout: { visibility: 'none' },
+        paint: { 'line-color': '#1E3765', 'line-width': 1, 'line-opacity': 0.3 },
+      });
+
+      map.addLayer({
+        id: 'core50', type: 'line', source: 'nb',
+        filter: ['==', ['get', 'kind'], 'core50'],
+        paint: { 'line-color': '#1f6feb', 'line-width': 2.5 },
+      });
+
+      map.addLayer({
+        id: 'core75', type: 'line', source: 'nb',
+        filter: ['==', ['get', 'kind'], 'core75'],
+        paint: { 'line-color': '#2ea043', 'line-width': 2.5 },
+      });
+
+      map.addLayer({
+        id: 'peak', type: 'circle', source: 'nb',
+        filter: ['==', ['get', 'kind'], 'peak'],
+        paint: {
+          'circle-radius': 7, 'circle-color': '#ffffff',
+          'circle-stroke-color': '#111111', 'circle-stroke-width': 2,
+        },
+      });
+
+      applyMemberVisibility();
+      wireHover();
+
+      if (neighbourhoods.length) select(neighbourhoods[0].slug);
+    });
+  }
+
+  function wireHover() {
+    const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false });
+    map.on('mousemove', 'cells', (e) => {
+      const f = e.features && e.features[0];
+      if (!f) return;
+      map.getCanvas().style.cursor = 'crosshair';
+      const pct = Math.round(f.properties.coverage * 100);
+      const n = current() ? current().member_count : '?';
+      popup.setLngLat(e.lngLat)
+           .setHTML(`<b>${pct}%</b> — ${f.properties.count} of ${n} people include this block`)
+           .addTo(map);
+    });
+    map.on('mouseleave', 'cells', () => {
+      map.getCanvas().style.cursor = '';
+      popup.remove();
+    });
+  }
+
+  function applyMemberVisibility() {
+    if (!map || !map.getLayer('members')) return;
+    map.setLayoutProperty('members', 'visibility', showMembers ? 'visible' : 'none');
+  }
+
+  function current() {
+    return neighbourhoods.find((n) => n.slug === selectedSlug) ?? null;
+  }
+
+  function sorted() {
+    const q = document.getElementById('filter').value.trim().toLowerCase();
+    const rows = q
+      ? neighbourhoods.filter((n) => n.label.toLowerCase().includes(q))
+      : neighbourhoods.slice();
+    return rows.sort((a, b) => {
+      const x = a[sortKey], y = b[sortKey];
+      if (typeof x === 'string') return x.localeCompare(y) * sortDir;
+      // nulls always sort last
+      if (x === null && y === null) return 0;
+      if (x === null) return 1;
+      if (y === null) return -1;
+      return (x - y) * sortDir;
+    });
+  }
+
+  function renderList() {
+    const head = COLS.map((c) => {
+      const arrow = c.key === sortKey ? (sortDir === -1 ? '▼' : '▲') : '';
+      return `<th class="${c.num ? 'num' : ''}" data-key="${c.key}">${c.label} <span class="arrow">${arrow}</span></th>`;
+    }).join('');
+
+    const body = sorted().map((n) => `
+      <tr class="row ${n.slug === selectedSlug ? 'selected' : ''}" data-slug="${n.slug}">
+        <td>${escapeHtml(n.label)}</td>
+        <td class="num">${n.member_count}</td>
+        <td class="num">${fmt(n.core_union_ratio, 3)}</td>
+        <td class="num">${fmt(n.mean_pairwise_iou, 3)}</td>
+      </tr>`).join('');
+
+    document.getElementById('list').innerHTML =
+      `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+
+    document.querySelectorAll('#list th').forEach((th) => {
+      th.onclick = () => {
+        const key = th.dataset.key;
+        if (key === sortKey) sortDir = -sortDir;
+        else { sortKey = key; sortDir = key === 'label' ? 1 : -1; }
+        renderList();
+      };
+    });
+    document.querySelectorAll('#list tr.row').forEach((tr) => {
+      tr.onclick = () => select(tr.dataset.slug);
+    });
+  }
+
+  function renderStats() {
+    const n = current();
+    const el = document.getElementById('stats');
+    if (!n) { el.innerHTML = '<h2>—</h2><div>Select a neighbourhood</div>'; return; }
+    el.innerHTML = `
+      <h2>${escapeHtml(n.label)}</h2>
+      <div><span>drawings</span><b>${n.member_count}</b></div>
+      <div><span>core / union</span><b>${fmt(n.core_union_ratio, 3)}</b></div>
+      <div><span>mean pairwise IoU</span><b>${fmt(n.mean_pairwise_iou, 3)}</b></div>
+      <div><span>core area</span><b>${fmt(n.core_area_km2, 2)} km²</b></div>
+      <div><span>union area</span><b>${fmt(n.union_area_km2, 2)} km²</b></div>`;
+  }
+
+  async function select(slug) {
+    hideError();
+    selectedSlug = slug;
+    renderList();
+    renderStats();
+
+    let fc;
+    try {
+      const res = await fetch(`/api/viz/${slug}`);
+      fc = await res.json();
+      if (!res.ok) return showError(fc.error ?? `Failed to load ${slug}.`, fc.hint);
+    } catch (err) {
+      return showError(`Failed to load ${slug}.`, String(err));
+    }
+
+    // A newer selection may have been made while this fetch was in flight.
+    if (slug !== selectedSlug) return;
+
+    map.getSource('nb').setData(fc);
+    const n = current();
+    if (n) {
+      map.fitBounds([[n.bounds[0], n.bounds[1]], [n.bounds[2], n.bounds[3]]], {
+        padding: 60, duration: 600,
+      });
+    }
+  }
+
+  document.getElementById('filter').addEventListener('input', renderList);
+  document.getElementById('toggle-members').addEventListener('change', (e) => {
+    showMembers = e.target.checked;
+    applyMemberVisibility();
+  });
+
+  boot();
+</script>
+</body>
+</html>

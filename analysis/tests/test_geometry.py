@@ -1,9 +1,11 @@
 import math
 
+import pytest
 from shapely.geometry import Polygon
 
 from geometry import parse_polygon, iou
 from geometry import agreement_surface, mean_pairwise_iou
+from geometry import coverage_grid, to_wgs84, to_utm
 from tests.fixtures import unit_square
 
 
@@ -79,3 +81,35 @@ def test_mean_pairwise_iou_single_is_one():
 def test_mean_pairwise_iou_identical_pair_is_one():
     a = unit_square(0, 0, 100)
     assert math.isclose(mean_pairwise_iou([a, a]), 1.0, rel_tol=1e-9)
+
+
+def test_coverage_grid_counts_overlapping_members():
+    # Two 200 m squares overlapping in one corner. They must be offset in BOTH
+    # axes: offsetting only in x would tile the union bbox completely, leaving
+    # no empty cells and making the counts.min() == 0 assertion impossible.
+    a = unit_square(0, 0, 200)      # x[0,200]   y[0,200]
+    b = unit_square(100, 100, 200)  # x[100,300] y[100,300]
+    gx, gy, counts, union = coverage_grid([a, b], grid_res=50.0)
+    assert gx.shape == counts.shape == gy.shape
+    assert counts.max() == 2          # the overlap region is inside both
+    assert counts.min() == 0          # bbox corners are inside neither
+    assert union.area > 0
+
+
+def test_coverage_grid_identical_polys_all_cells_full():
+    squares = [unit_square(0, 0, 500) for _ in range(3)]
+    _, _, counts, _ = coverage_grid(squares, grid_res=50.0)
+    assert counts.max() == 3
+
+
+def test_to_wgs84_roundtrips_to_original_latlng():
+    pts = [
+        {"lat": 43.66, "lng": -79.41},
+        {"lat": 43.68, "lng": -79.41},
+        {"lat": 43.68, "lng": -79.39},
+        {"lat": 43.66, "lng": -79.39},
+    ]
+    poly = parse_polygon(pts)
+    back = to_wgs84(to_utm(poly))
+    assert back.centroid.x == pytest.approx(poly.centroid.x, abs=1e-6)
+    assert back.centroid.y == pytest.approx(poly.centroid.y, abs=1e-6)
