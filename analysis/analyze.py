@@ -146,21 +146,26 @@ def render_relations(rel, unresolved):
 
     cols = ["label_a", "label_b", "n_a", "n_b", "declared_weight",
             "verdict", "coloc", "coloc_rel", "c_ab", "c_ba"]
+    declared_cols = cols + ["quotes"]
+    nested_cols = ["child", "parent", "n_a", "n_b", "declared_weight",
+                   "coloc", "c_ab", "c_ba"]
 
     lines.append("\n### Confirmed relations (declared AND same ground)\n")
-    lines.append(_table(rel[declared & colocated], cols))
+    lines.append(_table(rel[declared & colocated], declared_cols))
 
     lines.append("\n### Neighbour declarations (declared, and geometry says NOT the same ground)\n")
     lines.append(
         "_People answering the \"other names for this area\" question with the name of "
         "the place next door. **Only pairs the geometry could actually adjudicate "
         "appear here** — pairs with too few drawings are in the recruitment list "
-        "below, not accused of being neighbours._\n"
+        "below, not accused of being neighbours. **Read the quote before trusting a "
+        "row**: the name-matcher is imperfect and a quote that does not support the "
+        "pairing means the pairing is a parser artefact, not a respondent's claim._\n"
     )
-    lines.append(_table(rel[declared & distinct], cols))
+    lines.append(_table(rel[declared & distinct], declared_cols))
 
     lines.append("\n### Nested (one name well inside another)\n")
-    lines.append(_table(rel[rel["verdict"] == "NESTED"], cols))
+    lines.append(_table(rel[rel["verdict"] == "NESTED"], nested_cols))
 
     und = rel[undet]
     lines.append("\n### Can't tell yet — the recruitment list\n")

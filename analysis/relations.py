@@ -80,11 +80,15 @@ def _stats(pair, ia, ib) -> dict:
     self_b = _self_from(pair.SB, ib)
 
     # Headline stat: cross-name similarity as a fraction of within-name similarity.
-    # None (never NaN/inf/0) when a baseline is missing or zero.
-    baseline = None
-    if self_a is not None and self_b is not None:
+    # None (never NaN/inf/0/absurd) unless BOTH baselines are genuinely positive --
+    # a name whose own drawings are mutually disjoint (self == 0) has no meaningful
+    # denominator, and dividing by it shipped a 54x "similarity" for two disjoint names.
+    coloc_rel = None
+    if (self_a is not None and self_b is not None
+            and self_a > 0 and self_b > 0 and coloc is not None):
         baseline = float(np.median([self_a, self_b]))
-    coloc_rel = (coloc / baseline) if (baseline and coloc is not None) else None
+        if baseline > 0:
+            coloc_rel = coloc / baseline
 
     return {
         "n_a": int(len(ia)), "n_b": int(len(ib)),
@@ -200,11 +204,23 @@ def build_relations(prepared, subs, ids, labels, cfg):
             continue                               # a declared name nobody drew
         out = verdict(pa, pb, cfg, rng)
         s = out["stats"]
+
+        # NESTED is directional -- name the child explicitly. Without this the
+        # reader must infer it from c_ab/c_ba and has a coin-flip chance of
+        # inverting the claim ("Midtown is inside Yonge & Eglinton").
+        child = parent = None
+        if out["verdict"] == "NESTED":
+            if (s["c_ab"] or 0) >= (s["c_ba"] or 0):
+                child, parent = labels[a], labels[b]   # more of A is inside B
+            else:
+                child, parent = labels[b], labels[a]
+
         rows.append({
             "label_a": labels[a], "label_b": labels[b],
             "n_a": s["n_a"], "n_b": s["n_b"],
             "declared_weight": ev["weight"],
             "verdict": out["verdict"],
+            "child": child, "parent": parent,
             "stability": out["stability"],
             "coloc": s["coloc"], "coloc_rel": s["coloc_rel"],
             "c_ab": s["c_ab"], "c_ba": s["c_ba"], "ratio": s["ratio"],

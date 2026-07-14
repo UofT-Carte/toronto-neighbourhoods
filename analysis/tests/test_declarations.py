@@ -115,3 +115,41 @@ def test_unresolved_mentions_are_captured():
     pairs, unresolved = declared_pairs(subs, ids, labels)
     assert pairs == {}
     assert unresolved == [{"from_label": "Parkdale", "text": "Little Tibet"}]
+
+
+def test_generic_head_noun_does_not_fire_inside_a_longer_name():
+    # THE fabrication bug: "The Village" is keyed as bare "village", which was
+    # firing inside "Guildwood Village" and inventing a declaration 25km away.
+    g = build_gazetteer(["The Village", "Guildwood"], [1, 2])
+    hits = find_mentions("Guildwood Village.", g, own_cluster=99)
+    assert 1 not in hits          # The Village must NOT be mentioned
+    assert hits == {2}            # only Guildwood
+
+
+def test_generic_head_noun_still_matches_as_a_standalone_answer():
+    # ...but a bare "The Village" IS a real declaration and must still land.
+    g = build_gazetteer(["The Village", "Guildwood"], [1, 2])
+    assert find_mentions("The Village", g, own_cluster=99) == {1}
+
+
+def test_generic_head_noun_in_a_list_still_matches():
+    # delimiters must survive: "Roncy, The Village" offers TWO names.
+    g = build_gazetteer(["The Village", "Roncy"], [1, 2])
+    assert find_mentions("Roncy, The Village", g, own_cluster=99) == {1, 2}
+
+
+def test_sugar_beach_does_not_fabricate_the_beach():
+    g = build_gazetteer(["Beach", "Waterfront east"], [1, 2])
+    assert find_mentions("Sugar beach", g, own_cluster=99) == set()
+
+
+def test_a_pure_self_mention_is_not_quarantined_as_unresolved():
+    # "The Beaches" writing "Beaches" is naming ITSELF, not naming an untestable
+    # place. The quarantine list is captioned "names nobody drew" -- a self-mention
+    # there is a false claim.
+    subs = [{"neighborhoodName": "The Beaches", "otherNamesText": "Beaches"}]
+    ids = [0]
+    labels = {0: "The Beaches"}
+    pairs, unresolved = declared_pairs(subs, ids, labels)
+    assert pairs == {}
+    assert unresolved == []

@@ -123,3 +123,24 @@ def test_a_truly_coextensive_pair_is_still_same_extent():
     s = {"coloc": 0.85, "c_ab": 0.95, "c_ba": 0.90, "ratio": 1.02,
          "self_a": 0.5, "self_b": 0.5, "coloc_rel": 1.7, "n_a": 8, "n_b": 8}
     assert classify(s, CFG) == "SAME_EXTENT"
+
+
+def test_coloc_rel_is_none_when_a_name_disagrees_with_itself():
+    # A name whose own drawings are mutually disjoint has self-similarity 0, so
+    # there is no meaningful denominator. Dividing by it shipped a 54x "similarity"
+    # between two DISJOINT names.
+    a = [unit_square(0, 0, 200), unit_square(5000, 5000, 200),
+         unit_square(9000, 9000, 200)]                      # mutually disjoint
+    b = _jittered(0, 0, 400, 4)
+    s = pair_stats(a, b)
+    assert s["self_a"] == 0.0
+    assert s["coloc_rel"] is None      # never a number
+
+
+def test_nested_names_the_child_by_containment():
+    # The child is the name MORE of which sits inside the other.
+    parent = _jittered(0, 0, 400, 4)
+    child = _jittered(120, 120, 120, 4)
+    s = pair_stats(child, parent)          # a=child, b=parent
+    assert classify(s, CFG) == "NESTED"
+    assert s["c_ab"] > s["c_ba"]           # more of A (the child) is inside B

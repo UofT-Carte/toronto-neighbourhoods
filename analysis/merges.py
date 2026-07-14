@@ -20,8 +20,10 @@ def apply_merges(ids, labels, groups):
     stale entry must not crash the pipeline).
 
     merges.yaml is hand-edited, so this MUST tolerate a duplicated label within a
-    group and a label reused across groups. The invariant every caller relies on:
-    every id in the returned ids has a key in the returned labels.
+    group -- but a label reused ACROSS groups raises ValueError rather than
+    silently chaining the groups together transitively (see the pre-flight loop
+    below). The invariant every caller relies on: every id in the returned ids
+    has a key in the returned labels.
     """
     if not groups:
         return list(ids), dict(labels)
@@ -40,6 +42,19 @@ def apply_merges(ids, labels, groups):
             seen.add(cid)
             cid = remap[cid]
         return cid
+
+    seen_labels = set()
+    for group in groups:
+        lowered = {lbl.lower() for lbl in group}
+        clash = lowered & seen_labels
+        if clash:
+            raise ValueError(
+                f"merges.yaml: {sorted(clash)} appears in more than one group. "
+                "Merging across groups would chain them transitively -- the exact "
+                "failure that once fused 130 neighbourhoods into one cluster. "
+                "Combine the groups explicitly instead."
+            )
+        seen_labels |= lowered
 
     for group in groups:
         members = []

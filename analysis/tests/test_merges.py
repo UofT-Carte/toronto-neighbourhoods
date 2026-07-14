@@ -66,19 +66,22 @@ def test_apply_merges_tolerates_a_duplicated_label_in_one_group():
     assert new_labels[new_ids[0]] == "Parkdale"
 
 
-def test_apply_merges_handles_a_label_reused_across_groups():
+def test_apply_merges_refuses_to_chain_across_groups():
+    # merges.yaml is hand-edited. A label in two groups would fuse all three
+    # clusters transitively -- the failure that once fused 130 neighbourhoods.
+    # Fail loudly rather than silently chaining.
+    import pytest
     ids = [0, 1, 2]
     labels = {0: "A", 1: "B", 2: "C"}
-    new_ids, new_labels = apply_merges(ids, labels, [["A", "B"], ["C", "A"]])
-    assert set(new_ids) <= set(new_labels)          # no dangling ids -> no KeyError
-    assert len(set(new_ids)) == 1                    # overlapping groups collapse to one
+    with pytest.raises(ValueError, match="more than one group"):
+        apply_merges(ids, labels, [["A", "B"], ["C", "A"]])
 
 
 def test_apply_merges_never_leaves_an_id_without_a_label():
     # THE invariant build_clusters depends on: labels[cid] must never KeyError.
     ids = [0, 1, 2, 3]
     labels = {0: "A", 1: "B", 2: "C", 3: "D"}
-    groups = [["A", "B"], ["B", "C"], ["D", "A"]]    # deliberately tangled
+    groups = [["A", "B"], ["C", "D"]]
     new_ids, new_labels = apply_merges(ids, labels, groups)
     for cid in new_ids:
         assert cid in new_labels
