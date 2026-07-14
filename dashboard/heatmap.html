@@ -83,11 +83,18 @@
         <div id="map"></div>
         <div id="stats"><h2>—</h2><div>Select a neighbourhood</div></div>
         <div id="legend">
-          <strong>Share of drawings including a block</strong>
-          <div id="ramp"></div>
-          <div class="ends"><span>0%</span><span>100%</span></div>
-          <div class="line"><span class="swatch" style="background:#1f6feb"></span> 50% agree</div>
-          <div class="line"><span class="swatch" style="background:#2ea043"></span> 75% agree</div>
+          <div id="legend-heat">
+            <strong>Share of drawings including a block</strong>
+            <div id="ramp"></div>
+            <div class="ends"><span>0%</span><span>100%</span></div>
+            <div class="line"><span class="swatch" style="background:#1f6feb"></span> 50% agree</div>
+            <div class="line"><span class="swatch" style="background:#2ea043"></span> 75% agree</div>
+          </div>
+          <div id="legend-camps" style="display:none;">
+            <strong>Two places, one name</strong>
+            <div class="line"><span class="swatch" style="background:#1f6feb;height:10px;"></span> <span id="legend-camp-a"></span></div>
+            <div class="line"><span class="swatch" style="background:#e8590c;height:10px;"></span> <span id="legend-camp-b"></span></div>
+          </div>
         </div>
       </div>
     </div>
@@ -346,35 +353,56 @@
     document.getElementById('modes').style.display = on ? 'flex' : 'none';
     document.getElementById('banner').style.display = on ? 'block' : 'none';
 
-    if (!map || !map.getLayer('camp-fill')) return;
+    if (map && map.getLayer('camp-fill')) {
+      if (!on) {
+        // Non-contested: exactly the old view. Nothing regresses.
+        setVis(['cells', 'core50', 'core75', 'peak'], 'visible');
+        setVis(['camp-fill', 'camp-line', 'camp-members'], 'none');
+        applyMemberVisibility();
+      } else {
+        const combined = campMode === 'combined';
+        setVis(['cells', 'core50', 'core75', 'peak'], combined ? 'visible' : 'none');
+        setVis(['camp-fill', 'camp-line', 'camp-members'], combined ? 'none' : 'visible');
+        if (combined) {
+          applyMemberVisibility();
+        } else {
+          map.setLayoutProperty('members', 'visibility', 'none');   // camp-members replaces it
 
-    // Non-contested: exactly the old view. Nothing regresses.
-    if (!on) {
-      setVis(['cells', 'core50', 'core75', 'peak'], 'visible');
-      setVis(['camp-fill', 'camp-line', 'camp-members'], 'none');
-      applyMemberVisibility();
-      return;
+          const only = campMode === 'a' ? 1 : campMode === 'b' ? 2 : null;
+          const f = only
+            ? ['all', ['==', ['get', 'kind'], 'camp'], ['==', ['get', 'camp'], only]]
+            : ['==', ['get', 'kind'], 'camp'];
+          map.setFilter('camp-fill', f);
+          map.setFilter('camp-line', f);
+          map.setFilter('camp-members', only
+            ? ['all', ['==', ['get', 'kind'], 'member'], ['==', ['get', 'camp'], only]]
+            : ['==', ['get', 'kind'], 'member']);
+        }
+      }
     }
 
-    const combined = campMode === 'combined';
-    setVis(['cells', 'core50', 'core75', 'peak'], combined ? 'visible' : 'none');
-    setVis(['camp-fill', 'camp-line', 'camp-members'], combined ? 'none' : 'visible');
-    if (combined) { applyMemberVisibility(); return; }
-    map.setLayoutProperty('members', 'visibility', 'none');   // camp-members replaces it
-
-    const only = campMode === 'a' ? 1 : campMode === 'b' ? 2 : null;
-    const f = only
-      ? ['all', ['==', ['get', 'kind'], 'camp'], ['==', ['get', 'camp'], only]]
-      : ['==', ['get', 'kind'], 'camp'];
-    map.setFilter('camp-fill', f);
-    map.setFilter('camp-line', f);
-    map.setFilter('camp-members', only
-      ? ['all', ['==', ['get', 'kind'], 'member'], ['==', ['get', 'camp'], only]]
-      : ['==', ['get', 'kind'], 'member']);
+    renderLegend();
   }
 
   function setVis(ids, v) {
     ids.forEach((id) => { if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', v); });
+  }
+
+  function renderLegend() {
+    const n = current();
+    const heat = document.getElementById('legend-heat');
+    const camps = document.getElementById('legend-camps');
+    if (!heat || !camps) return;
+    // In camp mode the coverage ramp and the 50%/75% contours are HIDDEN, so a
+    // legend describing them would be describing layers that are not on screen.
+    const campView = isContested(n) && campMode !== 'combined';
+    heat.style.display = campView ? 'none' : 'block';
+    camps.style.display = campView ? 'block' : 'none';
+    if (campView) {
+      const s = n.camps.sizes;
+      document.getElementById('legend-camp-a').textContent = `Camp A — ${s[0]} drawing${s[0] === 1 ? '' : 's'}`;
+      document.getElementById('legend-camp-b').textContent = `Camp B — ${s[1]} drawing${s[1] === 1 ? '' : 's'}`;
+    }
   }
 
   function renderBanner() {
