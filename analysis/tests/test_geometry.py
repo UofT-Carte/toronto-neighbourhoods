@@ -3,7 +3,7 @@ import math
 import pytest
 from shapely.geometry import Polygon
 
-from geometry import parse_polygon, iou
+from geometry import parse_polygon, iou, containment
 from geometry import agreement_surface, mean_pairwise_iou
 from geometry import coverage_grid, to_wgs84, to_utm
 from tests.fixtures import unit_square
@@ -113,3 +113,28 @@ def test_to_wgs84_roundtrips_to_original_latlng():
     back = to_wgs84(to_utm(poly))
     assert back.centroid.x == pytest.approx(poly.centroid.x, abs=1e-6)
     assert back.centroid.y == pytest.approx(poly.centroid.y, abs=1e-6)
+
+
+def test_containment_child_fully_inside_parent():
+    parent = unit_square(0, 0, 100)
+    child = unit_square(25, 25, 50)          # 50x50 fully inside 100x100
+    assert containment(child, parent) == pytest.approx(1.0)      # all of child is in parent
+    assert containment(parent, child) == pytest.approx(0.25)     # only 1/4 of parent is in child
+
+
+def test_iou_alone_would_miss_the_nested_case():
+    # IoU cannot see nesting: a small child inside a big parent scores LOW on IoU
+    # even though the child is 100% contained. This is why containment exists.
+    parent = unit_square(0, 0, 100)
+    child = unit_square(25, 25, 50)
+    assert iou(child, parent) == pytest.approx(0.25)   # looks "distant"
+    assert containment(child, parent) == pytest.approx(1.0)  # but is perfectly nested
+
+
+def test_containment_disjoint_is_zero():
+    assert containment(unit_square(0, 0, 100), unit_square(500, 500, 100)) == 0.0
+
+
+def test_containment_zero_area_returns_zero():
+    empty = Polygon()
+    assert containment(empty, unit_square(0, 0, 100)) == 0.0

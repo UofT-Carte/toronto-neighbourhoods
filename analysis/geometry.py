@@ -73,6 +73,17 @@ def iou(a: Polygon, b: Polygon) -> float:
     return inter / union if union > 0 else 0.0
 
 
+def containment(a: Polygon, b: Polygon) -> float:
+    """Fraction of `a` that lies inside `b`. ASYMMETRIC.
+
+    IoU is structurally blind to nesting: a small polygon fully inside a large
+    one scores low on IoU despite being perfectly contained. Containment sees it.
+    """
+    if a.area == 0:
+        return 0.0
+    return a.intersection(b).area / a.area
+
+
 def agreement_surface(polys, grid_res: float) -> dict:
     n = len(polys)
     if n == 0:
