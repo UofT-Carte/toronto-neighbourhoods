@@ -16,3 +16,9 @@ groups:
 
   - labels: ["Yonge & Eglinton", "Yonge and Eg"]
     reason: "Same intersection; 'Eg' is the common local abbreviation."
+
+  - labels: ["Roncesvalles", "Roncy"]
+    reason: "'Roncy' is the near-universal local nickname for Roncesvalles (city knowledge). Geometry agrees (IoU 0.51) but fuzz.ratio only 47, so clustering keeps them apart."
+
+  - labels: ["Kensington Market", "kensington"]
+    reason: "'Kensington' is shorthand for Kensington Market (city knowledge). Too few bare-'Kensington' drawings (n=2) for the relations layer to confirm. NOTE: 'Kensington-Chinatown' is deliberately NOT merged — it is the larger combined district (Kensington Market sits ~99% inside it)."

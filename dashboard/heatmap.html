@@ -52,10 +52,11 @@
     #rel { margin: 10px; font-size: 12px; }
     #rel h3 { margin: 10px 0 4px; font-size: 12px; color: #5b6678; text-transform: uppercase;
               letter-spacing: .04em; }
-    .relrow { padding: 5px 7px; border: 1px solid #eef0f4; border-radius: 6px; margin-bottom: 4px;
-              cursor: pointer; }
-    .relrow:hover { background: #f0f6ff; }
+    .relrow { padding: 5px 7px; border: 1px solid #eef0f4; border-radius: 6px; margin-bottom: 4px; }
+    .relrow.nav { cursor: pointer; }
+    .relrow.nav:hover { background: #f0f6ff; }
     .relrow .q { color: #5b6678; font-size: 11px; display: block; margin-top: 2px; }
+    .relrow .nomap { color: #9aa4b5; font-size: 11px; }
   </style>
 </head>
 <body>
@@ -175,7 +176,11 @@
 
       map.addLayer({
         id: 'cells', type: 'fill', source: 'nb',
-        filter: ['==', ['get', 'kind'], 'cell'],
+        // Display only: hide blocks a SINGLE person included (count == 1). A lone
+        // stray drawing (e.g. someone who drew "The Annex" 7 km east) otherwise
+        // renders as a disconnected patch. The analysis/metrics are untouched —
+        // this filter lives only on the map layer.
+        filter: ['all', ['==', ['get', 'kind'], 'cell'], ['>=', ['get', 'count'], 2]],
         paint: {
           'fill-color': [
             'interpolate', ['linear'], ['get', 'coverage'],
@@ -443,13 +448,19 @@
           ? ` · <b>${escapeHtml(r.child)}</b> inside ${escapeHtml(r.parent)}` : '';
         const q = r.quotes
           ? `<span class="q">${escapeHtml(r.quotes.slice(0, 150))}</span>` : '';
-        html += `<div class="relrow" data-slug="${r.other_slug || ''}">` +
-          `<b>${escapeHtml(r.other_label)}</b> · overlap ${fmt(r.coloc, 2)}${w}${nested}${q}</div>`;
+        // A related name is only navigable if it has its own map — i.e. enough
+        // drawings to clear MIN_MEMBERS. Rare one-off declarations ("Fashion
+        // District", "The Well") have no page, so they must not LOOK clickable.
+        const nav = r.other_slug ? ' nav' : '';
+        const nomap = r.other_slug ? ''
+          : ` <span class="nomap">· no map (too few drawings)</span>`;
+        html += `<div class="relrow${nav}" data-slug="${r.other_slug || ''}">` +
+          `<b>${escapeHtml(r.other_label)}</b> · overlap ${fmt(r.coloc, 2)}${w}${nested}${nomap}${q}</div>`;
       }
     }
     el.innerHTML = html;
-    el.querySelectorAll('.relrow').forEach((d) => {
-      d.onclick = () => { if (d.dataset.slug) select(d.dataset.slug); };
+    el.querySelectorAll('.relrow.nav').forEach((d) => {
+      d.onclick = () => select(d.dataset.slug);
     });
   }
 
@@ -482,10 +493,32 @@
     applyCampMode();
     const n = current();
     if (n) {
-      map.fitBounds([[n.bounds[0], n.bounds[1]], [n.bounds[2], n.bounds[3]]], {
-        padding: 60, duration: 600,
-      });
+      // Frame the SHOWN area. For a plain heatmap that is the >=2-person extent,
+      // so a hidden lone-outlier block doesn't leave a big empty margin. Contested
+      // names keep their full (camp-inclusive) bounds. Display-only.
+      const db = isContested(n) ? null : shownCellBounds(fc);
+      const b = db || [[n.bounds[0], n.bounds[1]], [n.bounds[2], n.bounds[3]]];
+      map.fitBounds(b, { padding: 60, duration: 600 });
     }
+  }
+
+  // Bounding box of the blocks actually drawn (kind "cell", count >= 2). Returns
+  // null if none, so the caller falls back to the full union bounds.
+  function shownCellBounds(fc) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, seen = false;
+    const walk = (co) => {
+      if (typeof co[0] === 'number') {
+        if (co[0] < x0) x0 = co[0];
+        if (co[1] < y0) y0 = co[1];
+        if (co[0] > x1) x1 = co[0];
+        if (co[1] > y1) y1 = co[1];
+        seen = true;
+      } else co.forEach(walk);
+    };
+    for (const f of fc.features) {
+      if (f.properties.kind === 'cell' && f.properties.count >= 2) walk(f.geometry.coordinates);
+    }
+    return seen ? [[x0, y0], [x1, y1]] : null;
   }
 
   document.getElementById('filter').addEventListener('input', renderList);
