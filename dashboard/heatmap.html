@@ -42,6 +42,20 @@
     #legend .line { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
     #legend .swatch { width: 18px; height: 3px; border-radius: 2px; }
     .maplibregl-popup-content { font-size: 12px; padding: 7px 10px; }
+    #banner { display: none; background: #fff4e5; border: 1px solid #f0c987; color: #7a4b00;
+              padding: 8px 12px; margin: 8px 10px 0; border-radius: 6px; font-size: 12.5px; }
+    #banner b { color: #5a3800; }
+    #modes { display: none; gap: 6px; margin: 8px 10px 0; }
+    #modes button { flex: 1; padding: 5px 6px; font-size: 12px; border: 1px solid #d8dde6;
+                    background: #fff; border-radius: 6px; cursor: pointer; }
+    #modes button.on { background: #1E3765; color: #fff; border-color: #1E3765; }
+    #rel { margin: 10px; font-size: 12px; }
+    #rel h3 { margin: 10px 0 4px; font-size: 12px; color: #5b6678; text-transform: uppercase;
+              letter-spacing: .04em; }
+    .relrow { padding: 5px 7px; border: 1px solid #eef0f4; border-radius: 6px; margin-bottom: 4px;
+              cursor: pointer; }
+    .relrow:hover { background: #f0f6ff; }
+    .relrow .q { color: #5b6678; font-size: 11px; display: block; margin-top: 2px; }
   </style>
 </head>
 <body>
@@ -55,7 +69,15 @@
     <div id="main">
       <div id="panel">
         <input id="filter" type="search" placeholder="Filter neighbourhoods…" />
+        <div id="banner"></div>
+        <div id="modes">
+          <button data-mode="both">Both camps</button>
+          <button data-mode="a">Camp A</button>
+          <button data-mode="b">Camp B</button>
+          <button data-mode="combined">Combined</button>
+        </div>
         <div id="list"></div>
+        <div id="rel"></div>
       </div>
       <div id="mapwrap">
         <div id="map"></div>
@@ -85,6 +107,9 @@
   let sortKey = 'member_count';
   let sortDir = -1; // -1 desc, 1 asc
   let showMembers = false;
+  let relations = {};      // slug -> [relation rows]
+  let campMode = 'both';   // both | a | b | combined
+  let currentFc = null;
 
   function escapeHtml(str) {
     return String(str).replace(/[&<>"']/g, (c) =>
@@ -119,6 +144,12 @@
     neighbourhoods = data.neighbourhoods ?? [];
     document.getElementById('snapshot').textContent =
       `snapshot ${data.snapshot_date} · ${neighbourhoods.length} neighbourhoods`;
+    try {
+      const rr = await fetch('/api/viz/relations');
+      if (rr.ok) relations = await rr.json();
+    } catch (err) {
+      relations = {};       // relations are a bonus; the map still works without them
+    }
     initMap();
     renderList();
   }
@@ -161,6 +192,36 @@
         filter: ['==', ['get', 'kind'], 'member'],
         layout: { visibility: 'none' },
         paint: { 'line-color': '#1E3765', 'line-width': 1, 'line-opacity': 0.3 },
+      });
+
+      // Two camps = one name used for two different PLACES. Rendered side by side,
+      // because blending them into one surface is what hid this finding.
+      map.addLayer({
+        id: 'camp-fill', type: 'fill', source: 'nb',
+        filter: ['==', ['get', 'kind'], 'camp'],
+        layout: { visibility: 'none' },
+        paint: {
+          'fill-color': ['match', ['get', 'camp'], 1, '#1f6feb', 2, '#e8590c', '#888'],
+          'fill-opacity': 0.45,
+        },
+      });
+      map.addLayer({
+        id: 'camp-line', type: 'line', source: 'nb',
+        filter: ['==', ['get', 'kind'], 'camp'],
+        layout: { visibility: 'none' },
+        paint: {
+          'line-color': ['match', ['get', 'camp'], 1, '#1f6feb', 2, '#e8590c', '#888'],
+          'line-width': 2.5,
+        },
+      });
+      map.addLayer({
+        id: 'camp-members', type: 'line', source: 'nb',
+        filter: ['==', ['get', 'kind'], 'member'],
+        layout: { visibility: 'none' },
+        paint: {
+          'line-color': ['match', ['get', 'camp'], 1, '#1f6feb', 2, '#e8590c', '#888'],
+          'line-width': 1, 'line-opacity': 0.55,
+        },
       });
 
       map.addLayer({
@@ -277,11 +338,100 @@
       <div><span>union area</span><b>${fmt(n.union_area_km2, 2)} km²</b></div>`;
   }
 
+  function isContested(n) { return !!(n && n.contested && n.camps); }
+
+  function applyCampMode() {
+    const n = current();
+    const on = isContested(n);
+    document.getElementById('modes').style.display = on ? 'flex' : 'none';
+    document.getElementById('banner').style.display = on ? 'block' : 'none';
+
+    if (!map || !map.getLayer('camp-fill')) return;
+
+    // Non-contested: exactly the old view. Nothing regresses.
+    if (!on) {
+      setVis(['cells', 'core50', 'core75', 'peak'], 'visible');
+      setVis(['camp-fill', 'camp-line', 'camp-members'], 'none');
+      applyMemberVisibility();
+      return;
+    }
+
+    const combined = campMode === 'combined';
+    setVis(['cells', 'core50', 'core75', 'peak'], combined ? 'visible' : 'none');
+    setVis(['camp-fill', 'camp-line', 'camp-members'], combined ? 'none' : 'visible');
+    if (combined) { applyMemberVisibility(); return; }
+    map.setLayoutProperty('members', 'visibility', 'none');   // camp-members replaces it
+
+    const only = campMode === 'a' ? 1 : campMode === 'b' ? 2 : null;
+    const f = only
+      ? ['all', ['==', ['get', 'kind'], 'camp'], ['==', ['get', 'camp'], only]]
+      : ['==', ['get', 'kind'], 'camp'];
+    map.setFilter('camp-fill', f);
+    map.setFilter('camp-line', f);
+    map.setFilter('camp-members', only
+      ? ['all', ['==', ['get', 'kind'], 'member'], ['==', ['get', 'camp'], only]]
+      : ['==', ['get', 'kind'], 'member']);
+  }
+
+  function setVis(ids, v) {
+    ids.forEach((id) => { if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', v); });
+  }
+
+  function renderBanner() {
+    const n = current();
+    const el = document.getElementById('banner');
+    if (!isContested(n)) { el.style.display = 'none'; return; }
+    const c = n.camps;
+    el.innerHTML =
+      `<b>Two places, one name.</b> ${escapeHtml(n.label)}'s ${n.member_count} drawings split into ` +
+      `<b>${c.sizes[0]}</b> and <b>${c.sizes[1]}</b> — they share almost no ground ` +
+      `(overlap ${fmt(c.between_iou, 3)}). This is not one fuzzy place; it is two.`;
+    el.style.display = 'block';
+  }
+
+  const VERDICT_GROUPS = [
+    ['SAME_EXTENT', 'Same ground'],
+    ['NESTED', 'Nested'],
+    ['OVERLAPPING', 'Overlapping'],
+    ['DISTINCT', 'Declared, but NOT the same ground'],
+    ['UNDETERMINED', "Can't tell yet"],
+  ];
+
+  function renderRelations() {
+    const el = document.getElementById('rel');
+    const n = current();
+    const rows = (n && relations[n.slug]) || [];
+    if (!rows.length) { el.innerHTML = ''; return; }
+
+    let html = '';
+    for (const [verdict, title] of VERDICT_GROUPS) {
+      const group = rows.filter((r) => r.verdict === verdict).slice(0, 6);
+      if (!group.length) continue;
+      html += `<h3>${title}</h3>`;
+      for (const r of group) {
+        const w = r.declared_weight
+          ? ` · declared by ${r.declared_weight}` : '';
+        const nested = (verdict === 'NESTED' && r.child)
+          ? ` · <b>${escapeHtml(r.child)}</b> inside ${escapeHtml(r.parent)}` : '';
+        const q = r.quotes
+          ? `<span class="q">${escapeHtml(r.quotes.slice(0, 150))}</span>` : '';
+        html += `<div class="relrow" data-slug="${r.other_slug || ''}">` +
+          `<b>${escapeHtml(r.other_label)}</b> · overlap ${fmt(r.coloc, 2)}${w}${nested}${q}</div>`;
+      }
+    }
+    el.innerHTML = html;
+    el.querySelectorAll('.relrow').forEach((d) => {
+      d.onclick = () => { if (d.dataset.slug) select(d.dataset.slug); };
+    });
+  }
+
   async function select(slug) {
     hideError();
     selectedSlug = slug;
     renderList();
     renderStats();
+    renderBanner();
+    renderRelations();
 
     let fc;
     try {
@@ -296,6 +446,12 @@
     if (slug !== selectedSlug) return;
 
     map.getSource('nb').setData(fc);
+    currentFc = fc;
+    // A contested name defaults to BOTH camps -- the combined view is the misleading
+    // one we are replacing.
+    campMode = isContested(current()) ? 'both' : 'combined';
+    syncModeButtons();
+    applyCampMode();
     const n = current();
     if (n) {
       map.fitBounds([[n.bounds[0], n.bounds[1]], [n.bounds[2], n.bounds[3]]], {
@@ -308,6 +464,15 @@
   document.getElementById('toggle-members').addEventListener('change', (e) => {
     showMembers = e.target.checked;
     applyMemberVisibility();
+  });
+
+  function syncModeButtons() {
+    document.querySelectorAll('#modes button').forEach((b) => {
+      b.classList.toggle('on', b.dataset.mode === campMode);
+    });
+  }
+  document.querySelectorAll('#modes button').forEach((b) => {
+    b.onclick = () => { campMode = b.dataset.mode; syncModeButtons(); applyCampMode(); };
   });
 
   boot();
